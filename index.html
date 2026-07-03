@@ -56,6 +56,8 @@ button { font: inherit; cursor: pointer; }
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .tagline { color: var(--muted); margin: 4px 0 28px; }
+  .rules { color: var(--muted); font-size: .9rem; max-width: 560px; margin: 0 auto 22px; }
+  .rules b { color: var(--gold); }
 #names {
   width: 100%; min-height: 200px; resize: vertical;
   background: var(--card); color: var(--ink);
@@ -179,6 +181,7 @@ header {
   background: var(--card); border: 1px solid var(--gold); box-shadow: var(--glow-gold);
   animation: pop .5s backwards;
 }
+#party .ghost { background: var(--card); border: 1px solid var(--card-edge) !important; color: var(--ink); margin-right: 10px; }
 #party button {
   background: linear-gradient(100deg, var(--red), var(--gold)); color: #fff; border: none;
   border-radius: 999px; padding: 13px 38px; font-size: 1.1rem; font-weight: 700;
@@ -206,8 +209,9 @@ header {
   <textarea id="names" placeholder="One name per line (commas and spaces work too)&#10;&#10;KingCuzzo&#10;Shayla&#10;PixelPirate&#10;..." autofocus></textarea>
   <div class="knobs">
     <label class="knob">🏆 winners <input id="kWinners" type="number" min="1" max="24" value="5"></label>
-    <label class="knob">⏱ seconds between draws <input id="kSpeed" type="number" min="1" max="60" value="4"></label>
+    <label class="knob">⏱ seconds between draws <input id="kSpeed" type="number" min="1" max="60" value="1"></label>
   </div>
+  <p class="rules" id="rulesSetup"></p>
   <div><button id="start">Start the Blingo</button></div>
   <p class="err" id="err"></p>
 </section>
@@ -219,6 +223,7 @@ header {
     <div class="ctrls">
       <button id="pause">⏸ Pause</button>
       <button id="drawNow">🎲 Draw now</button>
+      <button id="showWin" style="display:none">🏆 Winners</button>
       <button id="reset">↩ New game</button>
     </div>
   </header>
@@ -226,6 +231,7 @@ header {
     <div id="gem"></div>
     <div id="call"><small>get ready</small>&nbsp;</div>
     <div id="history"></div>
+    <p class="rules" id="rulesGame"></p>
   </div>
   <div id="boards"></div>
 </section>
@@ -234,6 +240,7 @@ header {
   <div>
     <h2>💎 <em id="partyTitle">WINNERS</em> 💎</h2>
     <div id="winlist"></div>
+    <button id="viewBoards" class="ghost">👀 View the boards</button>
     <button id="again">Play again</button>
   </div>
 </div>
@@ -268,7 +275,7 @@ $("start").onclick = () => {
   const names = parseNames($("names").value);
   if (names.length < 2) { $("err").textContent = "Give me at least 2 names to play with."; return; }
   target = Math.max(1, +$("kWinners").value || 5);
-  speed = Math.max(1, +$("kSpeed").value || 4) * 1000;
+  speed = Math.max(1, +$("kSpeed").value || 1) * 1000;
   location.hash = "n=" + names.map(encodeURIComponent).join(",") + "&w=" + target + "&s=" + speed / 1000;
   begin(names);
 };
@@ -327,7 +334,7 @@ function begin(names) {
   drawn = []; winners = []; over = false; markSeq = 0;
   $("setup").style.display = "none"; $("party").style.display = "none";
   $("game").style.display = "block";
-  renderBoards(); renderSockets(); renderHistory();
+  renderBoards(); renderSockets(); renderHistory(); updateRules();
   $("call").innerHTML = "<small>first draw incoming</small>&nbsp;";
   $("pause").textContent = "⏸ Pause";
   clearInterval(timer); timer = setInterval(drawOne, speed);
@@ -414,12 +421,24 @@ $("pause").onclick = e => {
   else { timer = setInterval(drawOne, speed); e.target.textContent = "⏸ Pause"; }
 };
 $("drawNow").onclick = () => { if (!over) drawOne(); };
+$("viewBoards").onclick = () => { $("party").style.display = "none"; $("showWin").style.display = "inline-block"; };
+$("showWin").onclick = () => { $("party").style.display = "grid"; };
 $("reset").onclick = $("again").onclick = () => {
   clearInterval(timer); timer = null; over = true;
   history.replaceState(null, "", location.pathname);
   $("game").style.display = "none"; $("party").style.display = "none";
+  $("showWin").style.display = "none";
   $("setup").style.display = "block";
 };
+
+function updateRules() {
+  const w = Math.max(1, +$("kWinners").value || 5);
+  const txt = `Every name and number drawn gets a \u{1F48E}. Complete a row, column, or diagonal and the <b>names</b> in that line win \u2014 numbers and the FREE gem help finish lines but can't win. Drawing continues until <b>${w} winner${w > 1 ? "s" : ""}</b> ${w > 1 ? "are" : "is"} crowned.`;
+  $("rulesSetup").innerHTML = txt;
+  $("rulesGame").innerHTML = txt;
+}
+$("kWinners").addEventListener("input", updateRules);
+updateRules();
 
 /* ---------- deep links: #n=alice,bob&w=5&s=4&go=1 ---------- */
 (function fromHash() {
@@ -429,7 +448,7 @@ $("reset").onclick = $("again").onclick = () => {
   $("names").value = names.join("\n");
   if (p.get("w")) $("kWinners").value = p.get("w");
   if (p.get("s")) $("kSpeed").value = p.get("s");
-  if (p.get("go")) { target = +p.get("w") || 5; speed = (+p.get("s") || 4) * 1000; begin(names); }
+  if (p.get("go")) { target = +p.get("w") || 5; speed = (+p.get("s") || 1) * 1000; begin(names); }
 })();
 </script>
 </body>
