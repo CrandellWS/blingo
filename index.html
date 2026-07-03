@@ -14,20 +14,23 @@
    Every color, glow, and font below cascades through the page.
    ============================================================ */
 :root {
-  --bg-0:      #0b0612;   /* page backdrop (near-black plum)   */
-  --bg-1:      #1c1033;   /* deep purple gradient partner      */
-  --card:      #221542;   /* board + panel surfaces            */
-  --card-edge: #3d2a6d;   /* surface borders                   */
-  --ink:       #f5f0ff;   /* main text                         */
-  --muted:     #a291c4;   /* secondary text                    */
+  --bg-0:      #150925;   /* page backdrop (near-black plum)   */
+  --bg-1:      #331352;   /* royal purple gradient partner     */
+  --card:      #2c154e;   /* board + panel surfaces            */
+  --card-edge: #533081;   /* surface borders                   */
+  --ink:       #f8f1ff;   /* main text                         */
+  --muted:     #b9a3d6;   /* secondary text                    */
+  --gold:      #f2b544;   /* logo gold — primary accent        */
   --pink:      #ff6ec7;   /* the "soft hint of pink" accent    */
-  --red:       #ff3b5c;   /* win highlight A                   */
+  --red:       #e6323f;   /* ruby gem — win highlight A        */
   --blue:      #3ea6ff;   /* win highlight B                   */
-  --ice:       #b9f2ff;   /* diamond sparkle                   */
-  --violet:    #8f7bff;   /* extra column letter color         */
+  --green:     #3fba5f;   /* lucky clover                      */
+  --ice:       #d9c6ff;   /* lavender diamond sparkle          */
+  --violet:    #a081ff;   /* extra column letter color         */
   --font-display: "Fredoka", system-ui, sans-serif;      /* headings, calls  */
   --font-data:    "Space Grotesk", ui-monospace, monospace; /* numbers, chips */
   --glow-pink: 0 0 18px rgba(255,110,199,.45);
+  --glow-gold: 0 0 20px rgba(242,181,68,.5);
   --glow-ice:  0 0 22px rgba(185,242,255,.55);
 }
 /* ========================= end theme ======================== */
@@ -45,6 +48,8 @@ button { font: inherit; cursor: pointer; }
 /* ---------- setup screen ---------- */
 #setup { max-width: 640px; margin: 0 auto; padding: 48px 20px; text-align: center; }
 .logo { font-size: clamp(3rem, 9vw, 5rem); font-weight: 700; letter-spacing: .02em; margin: 0; }
+.logo-img { width: min(440px, 82vw); filter: drop-shadow(0 8px 30px rgba(0,0,0,.55)); }
+.logo-img-sm { height: 52px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.5)); }
 .logo em {
   font-style: normal;
   background: linear-gradient(100deg, var(--blue), var(--ice) 35%, var(--pink) 70%, var(--red));
@@ -67,9 +72,9 @@ button { font: inherit; cursor: pointer; }
 .knob input:focus { outline: 1px solid var(--pink); border-radius: 6px; }
 #start {
   font-size: 1.4rem; font-weight: 700; letter-spacing: .04em; color: #fff;
-  background: linear-gradient(100deg, var(--red), var(--pink));
+  background: linear-gradient(100deg, var(--red), var(--gold));
   border: none; border-radius: 999px; padding: 16px 52px;
-  box-shadow: var(--glow-pink); transition: transform .15s;
+  box-shadow: var(--glow-gold); transition: transform .15s;
 }
 #start:hover { transform: scale(1.05); }
 #setup .err { color: var(--red); min-height: 1.4em; margin-top: 12px; }
@@ -101,7 +106,7 @@ header {
 #stage { text-align: center; padding: 10px 0 6px; }
 #gem {
   width: 74px; height: 74px; margin: 0 auto -8px; position: relative;
-  background: conic-gradient(from 210deg, var(--ice), var(--blue), var(--violet), var(--pink), var(--ice));
+  background: conic-gradient(from 210deg, var(--ice), var(--gold), var(--violet), var(--pink), var(--ice));
   clip-path: polygon(50% 100%, 0 35%, 20% 10%, 80% 10%, 100% 35%);
   filter: drop-shadow(var(--glow-ice));
 }
@@ -117,7 +122,7 @@ header {
   font: 700 .85rem var(--font-data); padding: 5px 12px; border-radius: 999px;
   background: var(--card); border: 1px solid var(--card-edge); color: var(--muted);
 }
-.chip.name { color: var(--pink); border-color: var(--pink); }
+.chip.name { color: var(--gold); border-color: var(--gold); }
 
 /* ---------- boards ---------- */
 #boards {
@@ -157,7 +162,7 @@ header {
 }
 .sq.name.marked { background: color-mix(in srgb, var(--blue) 22%, var(--card)); }
 .sq.marked { border-color: var(--ice); }
-.sq.free { background: color-mix(in srgb, var(--pink) 18%, var(--card)); border-color: var(--pink); }
+.sq.free { background: color-mix(in srgb, var(--gold) 22%, var(--card)); border-color: var(--gold); }
 .sq.winline { animation: winpulse 1.2s infinite alternate; border-width: 2px; }
 
 /* ---------- winners overlay ---------- */
@@ -171,11 +176,11 @@ header {
 #winlist { display: flex; flex-direction: column; gap: 10px; margin: 0 auto 26px; }
 #winlist div {
   font-size: clamp(1.3rem, 4vw, 2rem); font-weight: 700; padding: 10px 34px; border-radius: 999px;
-  background: var(--card); border: 1px solid var(--pink); box-shadow: var(--glow-pink);
+  background: var(--card); border: 1px solid var(--gold); box-shadow: var(--glow-gold);
   animation: pop .5s backwards;
 }
 #party button {
-  background: linear-gradient(100deg, var(--blue), var(--violet)); color: #fff; border: none;
+  background: linear-gradient(100deg, var(--red), var(--gold)); color: #fff; border: none;
   border-radius: 999px; padding: 13px 38px; font-size: 1.1rem; font-weight: 700;
 }
 .confetti { position: fixed; top: -20px; z-index: 60; font-size: 1.2rem; animation: fall linear forwards; pointer-events: none; }
@@ -196,8 +201,8 @@ header {
 <body>
 
 <section id="setup">
-  <h1 class="logo">💎 <em>Blingo</em></h1>
-  <p class="tagline">Relatable bingo 💎 Drop in your chat names, hit start, diamonds do the rest.</p>
+  <img class="logo-img" src="logo.webp" alt="Blingo — the relatable bingo">
+  <p class="tagline">Drop in your chat names, hit start, diamonds do the rest.</p>
   <textarea id="names" placeholder="One name per line (commas and spaces work too)&#10;&#10;KingCuzzo&#10;Shayla&#10;PixelPirate&#10;..." autofocus></textarea>
   <div class="knobs">
     <label class="knob">🏆 winners <input id="kWinners" type="number" min="1" max="24" value="5"></label>
@@ -209,7 +214,7 @@ header {
 
 <section id="game">
   <header>
-    <h1 class="logo-sm">💎 <em class="logo" style="font-size:inherit">Blingo</em></h1>
+    <a href="#" ><img class="logo-img-sm" src="logo.webp" alt="Blingo"></a>
     <div id="sockets" title="winner slots"></div>
     <div class="ctrls">
       <button id="pause">⏸ Pause</button>
@@ -241,7 +246,7 @@ header {
 const CONFIG = {
   perBoard: 24,          // max names on one 5x5 card (center is FREE)
   colRanges: [[1,15],[16,30],[31,45],[46,60],[61,75]],   // B I N G O
-  letterColors: ["var(--blue)","var(--pink)","var(--ice)","var(--red)","var(--violet)"],
+  letterColors: ["var(--gold)","var(--green)","var(--ice)","var(--red)","var(--violet)"],
   historyLen: 12,
   marker: "💎",
 };
