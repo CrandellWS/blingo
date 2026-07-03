@@ -70,6 +70,8 @@ button { font: inherit; cursor: pointer; }
   background: var(--card); border: 1px solid var(--card-edge); border-radius: 12px;
   padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: .95rem; color: var(--muted);
 }
+.knob select { background: var(--card); color: var(--ink); border: none; font: 600 1rem var(--font-display); }
+.knob select:focus { outline: 1px solid var(--pink); border-radius: 6px; }
 .knob input { width: 60px; background: none; border: none; color: var(--ink); font: 700 1.1rem var(--font-data); text-align: center; }
 .knob input:focus { outline: 1px solid var(--pink); border-radius: 6px; }
 #start {
@@ -158,6 +160,10 @@ header {
   background: color-mix(in srgb, var(--blue) 22%, transparent);
   animation: drop .45s cubic-bezier(.2, 1.6, .4, 1);
 }
+.sq .pick {                /* draw-order badge, opposite corner from the gem */
+  position: absolute; top: 3px; left: 5px;
+  font: 700 .62rem var(--font-data); color: var(--gold); opacity: .95;
+}
 .sq.name .mark {           /* keep the name readable: small gem in the corner */
   inset: auto 3px 3px auto; background: none;
   font-size: clamp(.85rem, 1.8vw, 1.2rem); filter: drop-shadow(var(--glow-ice));
@@ -208,7 +214,12 @@ header {
   <p class="tagline">Drop in your chat names, hit start, diamonds do the rest.</p>
   <textarea id="names" placeholder="One name per line (commas and spaces work too)&#10;&#10;KingCuzzo&#10;Shayla&#10;PixelPirate&#10;..." autofocus></textarea>
   <div class="knobs">
-    <label class="knob">🏆 winners <input id="kWinners" type="number" min="1" max="24" value="5"></label>
+    <label class="knob">🏆 winners <select id="kMode">
+      <option value="first">first pick of the line</option>
+      <option value="last">last pick of the line</option>
+      <option value="both">first &amp; last of the line</option>
+      <option value="line" selected>the whole line</option>
+    </select></label>
     <label class="knob">⏱ seconds between draws <input id="kSpeed" type="number" min="1" max="60" value="1"></label>
   </div>
   <p class="rules" id="rulesSetup"></p>
@@ -262,7 +273,7 @@ const $ = id => document.getElementById(id);
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
 let boards = [], pool = [], drawn = [], winners = [], markSeq = 0;
-let target = 5, speed = 4000, timer = null, over = false;
+let mode = "line", speed = 1000, timer = null, over = false, callNo = 0;
 
 /* ---------- setup ---------- */
 function parseNames(text) {
@@ -274,9 +285,9 @@ function parseNames(text) {
 $("start").onclick = () => {
   const names = parseNames($("names").value);
   if (names.length < 2) { $("err").textContent = "Give me at least 2 names to play with."; return; }
-  target = Math.max(1, +$("kWinners").value || 5);
+  mode = $("kMode").value;
   speed = Math.max(1, +$("kSpeed").value || 1) * 1000;
-  location.hash = "n=" + names.map(encodeURIComponent).join(",") + "&w=" + target + "&s=" + speed / 1000;
+  location.hash = "n=" + names.map(encodeURIComponent).join(",") + "&m=" + mode + "&s=" + speed / 1000;
   begin(names);
 };
 
@@ -331,7 +342,7 @@ function begin(names) {
     ...names.map(n => ({ name: n })),
     ...boards.flatMap(b => b.cells.filter(c => c.num).map(c => ({ num: c.num }))),
   ]);
-  drawn = []; winners = []; over = false; markSeq = 0;
+  drawn = []; winners = []; over = false; markSeq = 0; callNo = 0;
   $("setup").style.display = "none"; $("party").style.display = "none";
   $("game").style.display = "block";
   renderBoards(); renderSockets(); renderHistory(); updateRules();
@@ -343,7 +354,7 @@ function begin(names) {
 function drawOne() {
   if (over || !pool.length) return;
   const call = pool.pop();
-  drawn.unshift(call);
+  callNo++; drawn.unshift(call);
   const gem = $("gem"); gem.classList.remove("spin"); void gem.offsetWidth; gem.classList.add("spin");
 
   if (call.name) {
@@ -355,10 +366,11 @@ function drawOne() {
   boards.forEach((b, bi) => b.cells.forEach((c, ci) => {
     if (c.marked) return;
     if ((call.name && c.name === call.name) || (call.num && c.num === call.num)) {
-      c.marked = true; c.seq = ++markSeq;
+      c.marked = true; c.seq = ++markSeq; c.pick = callNo;
       const sq = $(`sq-${bi}-${ci}`);
       sq.classList.add("marked");
       sq.insertAdjacentHTML("beforeend", `<span class="mark">${CONFIG.marker}</span>`);
+      if (c.name) sq.insertAdjacentHTML("beforeend", `<span class="pick">#${callNo}</span>`);
     }
   }));
   renderHistory();
@@ -372,21 +384,24 @@ LINES.push([0,6,12,18,24], [4,8,12,16,20]);
 
 function checkWins() {
   boards.forEach((b, bi) => LINES.forEach((line, li) => {
-    if (b.done.has(li) || !line.every(i => b.cells[i].marked)) return;
+    if (over || b.done.has(li) || !line.every(i => b.cells[i].marked)) return;
     b.done.add(li);
+    const names = line.map(i => b.cells[i]).filter(c => c.name).sort((a, z) => a.pick - z.pick);
+    if (!names.length) return;                          // all-numbers line: keep drawing
     line.forEach(i => $(`sq-${bi}-${i}`).classList.add("winline"));
-    line.map(i => b.cells[i]).filter(c => c.name && !winners.includes(c.name))
-      .sort((a, z) => a.seq - z.seq)                    // earliest-marked take remaining slots
-      .slice(0, target - winners.length)
-      .forEach(c => { winners.push(c.name); confettiBurst(); });
-    renderSockets();
+    winners =
+      mode === "first" ? [names[0].name] :
+      mode === "last"  ? [names[names.length - 1].name] :
+      mode === "both"  ? [...new Set([names[0].name, names[names.length - 1].name])] :
+                         names.map(c => c.name);        // whole line
+    over = true; renderSockets(); confettiBurst();
   }));
-  if (winners.length >= target || !pool.length) finish();
+  if (over || !pool.length) finish();
 }
 
 function finish() {
   over = true; clearInterval(timer);
-  $("partyTitle").textContent = winners.length === 1 ? "WINNER" : "WINNERS";
+  $("partyTitle").textContent = !winners.length ? "NO WINNERS" : winners.length === 1 ? "WINNER" : "WINNERS";
   $("winlist").innerHTML = winners.map((w, i) =>
     `<div style="animation-delay:${i * .35}s">${CONFIG.marker} ${esc(w)}</div>`).join("");
   setTimeout(() => { $("party").style.display = "grid"; confettiBurst(40); }, 1200);
@@ -394,7 +409,8 @@ function finish() {
 
 /* ---------- UI bits ---------- */
 function renderSockets() {
-  $("sockets").innerHTML = Array.from({ length: target }, (_, i) =>
+  const slots = winners.length || { first: 1, last: 1, both: 2, line: 5 }[mode];
+  $("sockets").innerHTML = Array.from({ length: slots }, (_, i) =>
     `<div class="socket${i < winners.length ? " won" : ""}" title="${esc(winners[i] || "open slot")}"><span>${CONFIG.marker}</span></div>`).join("");
 }
 function renderHistory() {
@@ -432,12 +448,18 @@ $("reset").onclick = $("again").onclick = () => {
 };
 
 function updateRules() {
-  const w = Math.max(1, +$("kWinners").value || 5);
-  const txt = `Every name and number drawn gets a \u{1F48E}. Complete a row, column, or diagonal and the <b>names</b> in that line win \u2014 numbers and the FREE gem help finish lines but can't win. Drawing continues until <b>${w} winner${w > 1 ? "s" : ""}</b> ${w > 1 ? "are" : "is"} crowned.`;
+  const m = $("kMode").value;
+  const who = {
+    first: "the <b>first-picked name</b> in that line wins",
+    last:  "the <b>last-picked name</b> (the one that completes it) wins",
+    both:  "the <b>first and last picked names</b> in that line win",
+    line:  "<b>every name in that line</b> wins",
+  }[m];
+  const txt = `Every name and number drawn gets a \u{1F48E} with its pick number. First completed row, column, or diagonal ends the game \u2014 ${who}. Numbers and the FREE gem help finish lines but can't win.`;
   $("rulesSetup").innerHTML = txt;
   $("rulesGame").innerHTML = txt;
 }
-$("kWinners").addEventListener("input", updateRules);
+$("kMode").addEventListener("input", updateRules);
 updateRules();
 
 /* ---------- deep links: #n=alice,bob&w=5&s=4&go=1 ---------- */
@@ -446,9 +468,9 @@ updateRules();
   if (!p.get("n")) return;
   const names = parseNames(p.get("n").split(",").map(decodeURIComponent).join("\n"));
   $("names").value = names.join("\n");
-  if (p.get("w")) $("kWinners").value = p.get("w");
+  if (p.get("m")) $("kMode").value = p.get("m");
   if (p.get("s")) $("kSpeed").value = p.get("s");
-  if (p.get("go")) { target = +p.get("w") || 5; speed = (+p.get("s") || 1) * 1000; begin(names); }
+  if (p.get("go")) { mode = $("kMode").value; speed = (+p.get("s") || 1) * 1000; begin(names); }
 })();
 </script>
 </body>
