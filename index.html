@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blingo 💎 — chat bingo giveaway</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💎</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   THEME — retheme Blingo by editing this block only.
+   Every color, glow, and font below cascades through the page.
+   ============================================================ */
+:root {
+  --bg-0:      #0b0612;   /* page backdrop (near-black plum)   */
+  --bg-1:      #1c1033;   /* deep purple gradient partner      */
+  --card:      #221542;   /* board + panel surfaces            */
+  --card-edge: #3d2a6d;   /* surface borders                   */
+  --ink:       #f5f0ff;   /* main text                         */
+  --muted:     #a291c4;   /* secondary text                    */
+  --pink:      #ff6ec7;   /* the "soft hint of pink" accent    */
+  --red:       #ff3b5c;   /* win highlight A                   */
+  --blue:      #3ea6ff;   /* win highlight B                   */
+  --ice:       #b9f2ff;   /* diamond sparkle                   */
+  --violet:    #8f7bff;   /* extra column letter color         */
+  --font-display: "Fredoka", system-ui, sans-serif;      /* headings, calls  */
+  --font-data:    "Space Grotesk", ui-monospace, monospace; /* numbers, chips */
+  --glow-pink: 0 0 18px rgba(255,110,199,.45);
+  --glow-ice:  0 0 22px rgba(185,242,255,.55);
+}
+/* ========================= end theme ======================== */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  min-height: 100vh; color: var(--ink);
+  background: radial-gradient(1200px 700px at 70% -10%, var(--bg-1), var(--bg-0) 60%);
+  font: 16px/1.5 var(--font-display);
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; cursor: pointer; }
+
+/* ---------- setup screen ---------- */
+#setup { max-width: 640px; margin: 0 auto; padding: 48px 20px; text-align: center; }
+.logo { font-size: clamp(3rem, 9vw, 5rem); font-weight: 700; letter-spacing: .02em; margin: 0; }
+.logo em {
+  font-style: normal;
+  background: linear-gradient(100deg, var(--blue), var(--ice) 35%, var(--pink) 70%, var(--red));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.tagline { color: var(--muted); margin: 4px 0 28px; }
+#names {
+  width: 100%; min-height: 200px; resize: vertical;
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--card-edge); border-radius: 16px;
+  padding: 16px; font: 500 1rem/1.6 var(--font-data);
+}
+#names:focus { outline: 2px solid var(--pink); box-shadow: var(--glow-pink); }
+.knobs { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 18px 0 24px; }
+.knob {
+  background: var(--card); border: 1px solid var(--card-edge); border-radius: 12px;
+  padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: .95rem; color: var(--muted);
+}
+.knob input { width: 60px; background: none; border: none; color: var(--ink); font: 700 1.1rem var(--font-data); text-align: center; }
+.knob input:focus { outline: 1px solid var(--pink); border-radius: 6px; }
+#start {
+  font-size: 1.4rem; font-weight: 700; letter-spacing: .04em; color: #fff;
+  background: linear-gradient(100deg, var(--red), var(--pink));
+  border: none; border-radius: 999px; padding: 16px 52px;
+  box-shadow: var(--glow-pink); transition: transform .15s;
+}
+#start:hover { transform: scale(1.05); }
+#setup .err { color: var(--red); min-height: 1.4em; margin-top: 12px; }
+
+/* ---------- game header ---------- */
+#game { display: none; padding: 12px clamp(8px, 2vw, 28px) 40px; }
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; padding: 8px 4px;
+}
+.logo-sm { font-size: 1.6rem; font-weight: 700; margin: 0; }
+#sockets { display: flex; gap: 10px; align-items: center; }
+.socket {
+  width: 44px; height: 44px; border-radius: 12px; rotate: 45deg;
+  border: 2px dashed var(--card-edge); display: grid; place-items: center;
+  transition: all .4s;
+}
+.socket span { rotate: -45deg; font-size: 1.15rem; filter: grayscale(1) opacity(.25); }
+.socket.won { border: 2px solid var(--ice); background: var(--card); box-shadow: var(--glow-ice); }
+.socket.won span { filter: none; animation: pop .5s; }
+.ctrls { display: flex; gap: 10px; }
+.ctrls button {
+  background: var(--card); color: var(--ink); border: 1px solid var(--card-edge);
+  border-radius: 999px; padding: 9px 18px; font-weight: 600;
+}
+.ctrls button:hover { border-color: var(--pink); }
+
+/* ---------- call stage (the signature) ---------- */
+#stage { text-align: center; padding: 10px 0 6px; }
+#gem {
+  width: 74px; height: 74px; margin: 0 auto -8px; position: relative;
+  background: conic-gradient(from 210deg, var(--ice), var(--blue), var(--violet), var(--pink), var(--ice));
+  clip-path: polygon(50% 100%, 0 35%, 20% 10%, 80% 10%, 100% 35%);
+  filter: drop-shadow(var(--glow-ice));
+}
+#gem.spin { animation: gemflip .6s ease; }
+#call {
+  font-size: clamp(2.2rem, 7vw, 4.2rem); font-weight: 700; line-height: 1.15;
+  min-height: 1.2em; letter-spacing: .01em;
+}
+#call .num { font-family: var(--font-data); }
+#call small { display: block; font-size: .3em; color: var(--muted); font-weight: 500; letter-spacing: .3em; text-transform: uppercase; }
+#history { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; padding: 10px 12px 4px; min-height: 38px; }
+.chip {
+  font: 700 .85rem var(--font-data); padding: 5px 12px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--card-edge); color: var(--muted);
+}
+.chip.name { color: var(--pink); border-color: var(--pink); }
+
+/* ---------- boards ---------- */
+#boards {
+  display: grid; gap: clamp(10px, 1.6vw, 22px); margin-top: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  justify-items: center;
+}
+.board {
+  background: var(--card); border: 1px solid var(--card-edge); border-radius: 20px;
+  padding: clamp(8px, 1.2vw, 16px); width: 100%; max-width: 460px;
+}
+.bingo-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 6px; }
+.bingo-row b {
+  text-align: center; font-size: clamp(1.1rem, 2.2vw, 1.6rem); font-weight: 700;
+  color: var(--c, var(--pink));
+}
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.sq {
+  aspect-ratio: 1; border-radius: 12px; position: relative; overflow: hidden;
+  background: color-mix(in srgb, var(--bg-0) 55%, var(--card));
+  border: 1px solid var(--card-edge);
+  display: grid; place-items: center; text-align: center; padding: 4px;
+  font-family: var(--font-data); font-weight: 700;
+  font-size: clamp(.7rem, 1.6vw, 1rem); overflow-wrap: anywhere; line-height: 1.15;
+}
+.sq.name { font-family: var(--font-display); font-weight: 600; color: var(--ink); }
+.sq.long { font-size: clamp(.55rem, 1.2vw, .8rem); }
+.sq .mark {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: clamp(1.3rem, 3vw, 2rem);
+  background: color-mix(in srgb, var(--blue) 22%, transparent);
+  animation: drop .45s cubic-bezier(.2, 1.6, .4, 1);
+}
+.sq.name .mark {           /* keep the name readable: small gem in the corner */
+  inset: auto 3px 3px auto; background: none;
+  font-size: clamp(.85rem, 1.8vw, 1.2rem); filter: drop-shadow(var(--glow-ice));
+}
+.sq.name.marked { background: color-mix(in srgb, var(--blue) 22%, var(--card)); }
+.sq.marked { border-color: var(--ice); }
+.sq.free { background: color-mix(in srgb, var(--pink) 18%, var(--card)); border-color: var(--pink); }
+.sq.winline { animation: winpulse 1.2s infinite alternate; border-width: 2px; }
+
+/* ---------- winners overlay ---------- */
+#party {
+  position: fixed; inset: 0; display: none; place-items: center; z-index: 50;
+  background: color-mix(in srgb, var(--bg-0) 82%, transparent); backdrop-filter: blur(6px);
+  text-align: center; padding: 20px;
+}
+#party h2 { font-size: clamp(2.4rem, 8vw, 4.6rem); margin: 0 0 10px; }
+#party h2 em { font-style: normal; color: var(--ice); text-shadow: var(--glow-ice); }
+#winlist { display: flex; flex-direction: column; gap: 10px; margin: 0 auto 26px; }
+#winlist div {
+  font-size: clamp(1.3rem, 4vw, 2rem); font-weight: 700; padding: 10px 34px; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--pink); box-shadow: var(--glow-pink);
+  animation: pop .5s backwards;
+}
+#party button {
+  background: linear-gradient(100deg, var(--blue), var(--violet)); color: #fff; border: none;
+  border-radius: 999px; padding: 13px 38px; font-size: 1.1rem; font-weight: 700;
+}
+.confetti { position: fixed; top: -20px; z-index: 60; font-size: 1.2rem; animation: fall linear forwards; pointer-events: none; }
+
+@keyframes drop { from { transform: translateY(-120%) scale(1.6); } to { transform: none; } }
+@keyframes pop { from { transform: scale(0); } 70% { transform: scale(1.25); } to { transform: scale(1); } }
+@keyframes gemflip { 50% { transform: rotateY(90deg) scale(1.2); } }
+@keyframes winpulse {
+  from { border-color: var(--red); box-shadow: 0 0 14px color-mix(in srgb, var(--red) 60%, transparent); }
+  to   { border-color: var(--blue); box-shadow: 0 0 14px color-mix(in srgb, var(--blue) 60%, transparent); }
+}
+@keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<section id="setup">
+  <h1 class="logo">💎 <em>Blingo</em></h1>
+  <p class="tagline">Relatable bingo 💎 Drop in your chat names, hit start, diamonds do the rest.</p>
+  <textarea id="names" placeholder="One name per line (commas and spaces work too)&#10;&#10;KingCuzzo&#10;Shayla&#10;PixelPirate&#10;..." autofocus></textarea>
+  <div class="knobs">
+    <label class="knob">🏆 winners <input id="kWinners" type="number" min="1" max="24" value="5"></label>
+    <label class="knob">⏱ seconds between draws <input id="kSpeed" type="number" min="1" max="60" value="4"></label>
+  </div>
+  <div><button id="start">Start the Blingo</button></div>
+  <p class="err" id="err"></p>
+</section>
+
+<section id="game">
+  <header>
+    <h1 class="logo-sm">💎 <em class="logo" style="font-size:inherit">Blingo</em></h1>
+    <div id="sockets" title="winner slots"></div>
+    <div class="ctrls">
+      <button id="pause">⏸ Pause</button>
+      <button id="drawNow">🎲 Draw now</button>
+      <button id="reset">↩ New game</button>
+    </div>
+  </header>
+  <div id="stage">
+    <div id="gem"></div>
+    <div id="call"><small>get ready</small>&nbsp;</div>
+    <div id="history"></div>
+  </div>
+  <div id="boards"></div>
+</section>
+
+<div id="party">
+  <div>
+    <h2>💎 <em id="partyTitle">WINNERS</em> 💎</h2>
+    <div id="winlist"></div>
+    <button id="again">Play again</button>
+  </div>
+</div>
+
+<script>
+/* Blingo — single-file chat bingo giveaway.
+   Dev map: THEME block (top of <style>) for colors/fonts · CONFIG below for rules ·
+   makeBoards() builds cards · drawOne() runs the game · checkWins() finds lines. */
+
+const CONFIG = {
+  perBoard: 24,          // max names on one 5x5 card (center is FREE)
+  colRanges: [[1,15],[16,30],[31,45],[46,60],[61,75]],   // B I N G O
+  letterColors: ["var(--blue)","var(--pink)","var(--ice)","var(--red)","var(--violet)"],
+  historyLen: 12,
+  marker: "💎",
+};
+
+const $ = id => document.getElementById(id);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+let boards = [], pool = [], drawn = [], winners = [], markSeq = 0;
+let target = 5, speed = 4000, timer = null, over = false;
+
+/* ---------- setup ---------- */
+function parseNames(text) {
+  const seen = new Set();
+  return text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+    .filter(n => { const k = n.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+$("start").onclick = () => {
+  const names = parseNames($("names").value);
+  if (names.length < 2) { $("err").textContent = "Give me at least 2 names to play with."; return; }
+  target = Math.max(1, +$("kWinners").value || 5);
+  speed = Math.max(1, +$("kSpeed").value || 4) * 1000;
+  location.hash = "n=" + names.map(encodeURIComponent).join(",") + "&w=" + target + "&s=" + speed / 1000;
+  begin(names);
+};
+
+/* ---------- board generation ---------- */
+function makeBoards(names) {
+  const nBoards = Math.max(1, Math.ceil(names.length / CONFIG.perBoard));
+  const deal = Array.from({ length: nBoards }, () => []);
+  shuffle([...names]).forEach((n, i) => deal[i % nBoards].push(n));   // even round-robin
+
+  return deal.map(list => {
+    const cells = Array(25).fill(null);
+    cells[12] = { free: true };
+    const open = shuffle([...Array(25).keys()].filter(i => i !== 12));
+    list.forEach((name, i) => cells[open[i]] = { name });
+    const used = new Set();
+    cells.forEach((c, i) => {
+      if (c) return;
+      const [lo, hi] = CONFIG.colRanges[i % 5];
+      let num; do { num = lo + Math.floor(Math.random() * (hi - lo + 1)); } while (used.has(num));
+      used.add(num);
+      cells[i] = { num };
+    });
+    return { cells, done: new Set() };
+  });
+}
+
+function renderBoards() {
+  $("boards").innerHTML = "";
+  boards.forEach((b, bi) => {
+    const el = document.createElement("div");
+    el.className = "board";
+    el.innerHTML = "<div class='bingo-row'>" +
+      "BINGO".split("").map((L, i) => `<b style="--c:${CONFIG.letterColors[i]}">${L}</b>`).join("") +
+      "</div><div class='grid'></div>";
+    const grid = el.querySelector(".grid");
+    b.cells.forEach((c, ci) => {
+      const sq = document.createElement("div");
+      sq.id = `sq-${bi}-${ci}`;
+      if (c.free)      { sq.className = "sq free marked"; sq.innerHTML = `<span class="mark">${CONFIG.marker}</span>`; c.marked = true; }
+      else if (c.name) { sq.className = "sq name" + (c.name.length > 7 ? " long" : ""); sq.textContent = c.name; }
+      else             { sq.className = "sq"; sq.textContent = c.num; }
+      grid.appendChild(sq);
+    });
+    $("boards").appendChild(el);
+  });
+}
+
+/* ---------- game loop ---------- */
+function begin(names) {
+  boards = makeBoards(names);
+  pool = shuffle([
+    ...names.map(n => ({ name: n })),
+    ...boards.flatMap(b => b.cells.filter(c => c.num).map(c => ({ num: c.num }))),
+  ]);
+  drawn = []; winners = []; over = false; markSeq = 0;
+  $("setup").style.display = "none"; $("party").style.display = "none";
+  $("game").style.display = "block";
+  renderBoards(); renderSockets(); renderHistory();
+  $("call").innerHTML = "<small>first draw incoming</small>&nbsp;";
+  $("pause").textContent = "⏸ Pause";
+  clearInterval(timer); timer = setInterval(drawOne, speed);
+}
+
+function drawOne() {
+  if (over || !pool.length) return;
+  const call = pool.pop();
+  drawn.unshift(call);
+  const gem = $("gem"); gem.classList.remove("spin"); void gem.offsetWidth; gem.classList.add("spin");
+
+  if (call.name) {
+    $("call").innerHTML = `<small>name called</small>${CONFIG.marker} ${esc(call.name)}`;
+  } else {
+    const L = "BINGO"[Math.floor((call.num - 1) / 15)];
+    $("call").innerHTML = `<small>number called</small><span class="num" style="color:${CONFIG.letterColors["BINGO".indexOf(L)]}">${L}-${call.num}</span>`;
+  }
+  boards.forEach((b, bi) => b.cells.forEach((c, ci) => {
+    if (c.marked) return;
+    if ((call.name && c.name === call.name) || (call.num && c.num === call.num)) {
+      c.marked = true; c.seq = ++markSeq;
+      const sq = $(`sq-${bi}-${ci}`);
+      sq.classList.add("marked");
+      sq.insertAdjacentHTML("beforeend", `<span class="mark">${CONFIG.marker}</span>`);
+    }
+  }));
+  renderHistory();
+  checkWins();
+}
+
+const LINES = [];
+for (let r = 0; r < 5; r++) LINES.push([0,1,2,3,4].map(c => r * 5 + c));
+for (let c = 0; c < 5; c++) LINES.push([0,1,2,3,4].map(r => r * 5 + c));
+LINES.push([0,6,12,18,24], [4,8,12,16,20]);
+
+function checkWins() {
+  boards.forEach((b, bi) => LINES.forEach((line, li) => {
+    if (b.done.has(li) || !line.every(i => b.cells[i].marked)) return;
+    b.done.add(li);
+    line.forEach(i => $(`sq-${bi}-${i}`).classList.add("winline"));
+    line.map(i => b.cells[i]).filter(c => c.name && !winners.includes(c.name))
+      .sort((a, z) => a.seq - z.seq)                    // earliest-marked take remaining slots
+      .slice(0, target - winners.length)
+      .forEach(c => { winners.push(c.name); confettiBurst(); });
+    renderSockets();
+  }));
+  if (winners.length >= target || !pool.length) finish();
+}
+
+function finish() {
+  over = true; clearInterval(timer);
+  $("partyTitle").textContent = winners.length === 1 ? "WINNER" : "WINNERS";
+  $("winlist").innerHTML = winners.map((w, i) =>
+    `<div style="animation-delay:${i * .35}s">${CONFIG.marker} ${esc(w)}</div>`).join("");
+  setTimeout(() => { $("party").style.display = "grid"; confettiBurst(40); }, 1200);
+}
+
+/* ---------- UI bits ---------- */
+function renderSockets() {
+  $("sockets").innerHTML = Array.from({ length: target }, (_, i) =>
+    `<div class="socket${i < winners.length ? " won" : ""}" title="${esc(winners[i] || "open slot")}"><span>${CONFIG.marker}</span></div>`).join("");
+}
+function renderHistory() {
+  $("history").innerHTML = drawn.slice(0, CONFIG.historyLen).map(c =>
+    c.name ? `<span class="chip name">${esc(c.name)}</span>`
+           : `<span class="chip">${"BINGO"[Math.floor((c.num - 1) / 15)]}-${c.num}</span>`).join("");
+}
+function confettiBurst(n = 18) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement("span");
+    s.className = "confetti"; s.textContent = ["💎", "✨", "💠", "🔹"][i % 4];
+    s.style.left = Math.random() * 100 + "vw";
+    s.style.animationDuration = 2 + Math.random() * 2 + "s";
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 4500);
+  }
+}
+const esc = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+$("pause").onclick = e => {
+  if (over) return;
+  if (timer) { clearInterval(timer); timer = null; e.target.textContent = "▶ Resume"; }
+  else { timer = setInterval(drawOne, speed); e.target.textContent = "⏸ Pause"; }
+};
+$("drawNow").onclick = () => { if (!over) drawOne(); };
+$("reset").onclick = $("again").onclick = () => {
+  clearInterval(timer); timer = null; over = true;
+  history.replaceState(null, "", location.pathname);
+  $("game").style.display = "none"; $("party").style.display = "none";
+  $("setup").style.display = "block";
+};
+
+/* ---------- deep links: #n=alice,bob&w=5&s=4&go=1 ---------- */
+(function fromHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.get("n")) return;
+  const names = parseNames(p.get("n").split(",").map(decodeURIComponent).join("\n"));
+  $("names").value = names.join("\n");
+  if (p.get("w")) $("kWinners").value = p.get("w");
+  if (p.get("s")) $("kSpeed").value = p.get("s");
+  if (p.get("go")) { target = +p.get("w") || 5; speed = (+p.get("s") || 4) * 1000; begin(names); }
+})();
+</script>
+</body>
+</html>
