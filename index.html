@@ -314,6 +314,7 @@ const CONFIG = {
   letterColors: ["var(--gold)","var(--green)","var(--ice)","var(--red)","var(--violet)"],
   historyLen: 12,
   marker: "💎",
+  planAttempts: 2000,    // rerolls to find a single-winning-line game before falling back
 };
 
 const $ = id => document.getElementById(id);
@@ -321,6 +322,7 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.f
 
 let boards = [], pool = [], drawn = [], winners = [], markSeq = 0;
 let mode = "line", speed = 1000, timer = null, over = false, callNo = 0;
+let gamePlan = null;   // pre-computed { boards, order, winDraw, winLine, forced }
 
 /* ---------- setup ---------- */
 function parseNames(text) {
@@ -384,11 +386,9 @@ function renderBoards() {
 
 /* ---------- game loop ---------- */
 function begin(names) {
-  boards = makeBoards(names);
-  pool = shuffle([
-    ...names.map(n => ({ name: n })),
-    ...boards.flatMap(b => b.cells.filter(c => c.num).map(c => ({ num: c.num }))),
-  ]);
+  gamePlan = planGame(names);            // pre-solve to a single winning line
+  boards = gamePlan.boards;
+  pool = gamePlan.order.slice().reverse();   // pool.pop() plays gamePlan.order in sequence
   drawn = []; winners = []; over = false; markSeq = 0; callNo = 0;
   $("setup").style.display = "none"; $("party").style.display = "none";
   $("game").style.display = "block";
@@ -429,12 +429,71 @@ for (let r = 0; r < 5; r++) LINES.push([0,1,2,3,4].map(c => r * 5 + c));
 for (let c = 0; c < 5; c++) LINES.push([0,1,2,3,4].map(r => r * 5 + c));
 LINES.push([0,6,12,18,24], [4,8,12,16,20]);
 
+/* ---------- pre-computed plan: guarantee exactly one winning line ---------- */
+function buildCalls(names, bs) {
+  const nums = new Set();
+  bs.forEach(b => b.cells.forEach(c => { if (c.num) nums.add(c.num); }));
+  return [...names.map(n => ({ name: n })), ...[...nums].map(num => ({ num }))];
+}
+const lineHasName = (b, line) => line.some(i => b.cells[i].name);
+
+// Replay an order headlessly (no DOM); return the first draw at which one or
+// more name-bearing lines complete, and which board+line each is.
+function simulate(bs, order) {
+  const marks = bs.map(b => b.cells.map(c => !!c.free));
+  const look = bs.map(b => {
+    const m = { name: {}, num: {} };
+    b.cells.forEach((c, i) => { if (c.name) m.name[c.name] = i; else if (c.num) m.num[c.num] = i; });
+    return m;
+  });
+  for (let d = 0; d < order.length; d++) {
+    const call = order[d];
+    for (let bi = 0; bi < bs.length; bi++) {
+      const i = call.name != null ? look[bi].name[call.name] : look[bi].num[call.num];
+      if (i != null) marks[bi][i] = true;
+    }
+    const tied = [];
+    for (let bi = 0; bi < bs.length; bi++)
+      for (let li = 0; li < LINES.length; li++)
+        if (LINES[li].every(i => marks[bi][i]) && lineHasName(bs[bi], LINES[li]))
+          tied.push({ boardIndex: bi, lineIndex: li });
+    if (tied.length) return { winDraw: d, tied };
+  }
+  return { winDraw: -1, tied: [] };
+}
+
+// Deal boards + draw order, rerolling until the first completed draw yields
+// exactly one winning line. Fair: every reroll is a fresh random deal+shuffle
+// and we keep a random survivor. If no clean outcome is found within
+// CONFIG.planAttempts (only possible with many boards sharing numbers), keep the
+// best attempt and pick one tied line at random — the game never hangs.
+function planGame(names) {
+  let fallback = null;
+  for (let a = 0; a < CONFIG.planAttempts; a++) {
+    const bs = makeBoards(names);
+    const order = shuffle(buildCalls(names, bs));
+    const res = simulate(bs, order);
+    if (res.winDraw < 0) continue;
+    if (res.tied.length === 1)
+      return { boards: bs, order, winDraw: res.winDraw, winLine: res.tied[0], forced: false };
+    if (!fallback) fallback = { boards: bs, order, res };
+  }
+  if (!fallback) {   // no completable line at all (degenerate input) — game just draws out
+    const bs = makeBoards(names);
+    return { boards: bs, order: shuffle(buildCalls(names, bs)), winDraw: -1, winLine: null, forced: true };
+  }
+  const t = fallback.res.tied;
+  return { boards: fallback.boards, order: fallback.order, winDraw: fallback.res.winDraw,
+           winLine: t[Math.floor(Math.random() * t.length)], forced: true };
+}
+
 function checkWins() {
-  boards.forEach((b, bi) => LINES.forEach((line, li) => {
-    if (over || b.done.has(li) || !line.every(i => b.cells[i].marked)) return;
-    b.done.add(li);
-    const names = line.map(i => b.cells[i]).filter(c => c.name).sort((a, z) => a.pick - z.pick);
-    if (!names.length) return;                          // all-numbers line: keep drawing
+  // The plan already picked the winning draw and the single winning line, so
+  // playback simply honors it — no coincidental extra line can steal the win.
+  if (!over && gamePlan.winLine && callNo - 1 === gamePlan.winDraw) {
+    const { boardIndex: bi, lineIndex: li } = gamePlan.winLine;
+    const line = LINES[li];
+    const names = line.map(i => boards[bi].cells[i]).filter(c => c.name).sort((a, z) => a.pick - z.pick);
     line.forEach(i => $(`sq-${bi}-${i}`).classList.add("winline"));
     winners =
       mode === "first" ? [names[0].name] :
@@ -442,7 +501,7 @@ function checkWins() {
       mode === "both"  ? [...new Set([names[0].name, names[names.length - 1].name])] :
                          names.map(c => c.name);        // whole line
     over = true; renderSockets(); confettiBurst();
-  }));
+  }
   if (over || !pool.length) finish();
 }
 
