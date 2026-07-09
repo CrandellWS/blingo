@@ -32,3 +32,7 @@ Fonts load from Google Fonts with system fallbacks, so the page still works full
 ## License
 
 MIT. Go make someone's chat sparkle.
+
+---
+
+<sub>Push test — confirming write access to origin (2026-07-09).</sub>
