@@ -13,9 +13,52 @@ const text = (body, status = 200) => new Response(body, {
   status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
 });
 
+/* GET /lb?room=RelatableShayla[&n=3] -> top N of that room's active MyPrize leaderboard mission, plain text.
+   Public data only (myprize.us/api/missions). Hidden players show as "1st place winner". Cached 60s. */
+const MEDALS = ["🥇", "🥈", "🥉"];
+const ORD = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+const sc = cents => (Number(cents || 0) / 100).toLocaleString("en-US", { maximumFractionDigits: 0 }) + " SC";
+async function leaderboard(url, ctx) {
+  const room = (url.searchParams.get("room") || "").trim().toLowerCase();
+  const n = Math.min(5, Math.max(1, +url.searchParams.get("n") || 3));
+  if (!room) return text("🏆 Add ?room=YourRoomName to the command");
+  const cache = caches.default, ck = new Request("https://lb.cache/missions");
+  let res = await cache.match(ck);
+  if (!res) {
+    // The list is paged (default 20): read every page so no room falls off the end.
+    const all = [];
+    for (let page = 1; page <= 5; page++) {
+      const live = await fetch(`https://myprize.us/api/missions?page=${page}&page_size=100`, { headers: { accept: "application/json" } });
+      if (!live.ok) { if (page === 1) return text("🏆 Leaderboard is unavailable right now"); break; }
+      const batch = (await live.json()).results || [];
+      all.push(...batch);
+      if (batch.length < 100) break;
+    }
+    res = new Response(JSON.stringify({ results: all }), { headers: { "cache-control": "max-age=60", "content-type": "application/json" } });
+    ctx.waitUntil(cache.put(ck, res.clone()));
+  }
+  const now = Date.now();
+  const missions = ((await res.json()).results || []).filter(m =>
+    m.type === "leaderboard" && String(m.room_name || "").toLowerCase() === room && new Date(m.end_date).getTime() > now);
+  const m = missions[0];
+  if (!m) return text("🏆 No active leaderboard for that room right now");
+  const places = (m.details && m.details.places) || [];
+  const prize = rank => { const p = places.find(x => rank >= x.start && rank <= (x.end ?? x.start)); return p ? p.rewards?.mission_promo_amounts?.SC?.amount : 0; };
+  const rows = (m.leaderboard || []).slice(0, n).map((e, i) => {
+    const r = i + 1, who = !e.username || e.username === "Hidden" ? `${ORD(r)} place winner` : e.username;
+    const p = prize(r);
+    return `${MEDALS[i] || r + "."} ${who}: ${sc(e.score)} wagered${p ? ` (wins ${sc(p)})` : ""}`;
+  });
+  if (!rows.length) return text(`🏆 ${m.name}: nobody on the board yet`);
+  const ends = new Date(m.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
+  return text(`🏆 ${m.name} (ends ${ends}) ${rows.join(" | ")}`.slice(0, 400));
+}
+
 export default {
-  async fetch(req, env) {
-    const [, kind, key] = new URL(req.url).pathname.split("/");
+  async fetch(req, env, ctx) {
+    const url = new URL(req.url);
+    if (url.pathname === "/lb") return leaderboard(url, ctx);
+    const [, kind, key] = url.pathname.split("/");
     if (!KEY_RE.test(key || "") || (kind !== "c" && kind !== "ws")) return text("blingo relay", 404);
     return env.ROOM.get(env.ROOM.idFromName(key)).fetch(req);
   },
