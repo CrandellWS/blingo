@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blingo Winners</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Blingo winner tab: shows ?w=Alice,Bob (and ?s=claimed,waiting) big and plain.
+   Blingo opens this once and keeps it updated, so the streamer always has the winners on screen.
+   ?bg=transparent for an OBS browser source. */
+:root { --bg-0: #150925; --bg-1: #331352; --card: #2c154e; --ink: #f8f1ff; --muted: #b9a3d6; --gold: #f2b544; --green: #3ddc84; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body { display: grid; place-items: center; text-align: center; padding: 16px; overflow: hidden;
+  background: radial-gradient(ellipse at top, var(--bg-1), var(--bg-0)); color: var(--ink); font: 16px/1.4 "Fredoka", system-ui, sans-serif; }
+body.transparent { background: transparent; }
+h1 { font-size: clamp(1.4rem, 5vw, 2.6rem); color: var(--gold); letter-spacing: .08em; margin-bottom: 18px; }
+#list { display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.w { font-size: clamp(2rem, 9vw, 5rem); font-weight: 700; padding: 6px 40px; border-radius: 999px; background: var(--card);
+  border: 3px solid var(--gold); box-shadow: 0 0 28px color-mix(in srgb, var(--gold) 55%, transparent); max-width: 94vw; overflow-wrap: anywhere; }
+.w small { display: block; font-size: .3em; color: var(--muted); font-weight: 600; }
+.w.claimed { border-color: var(--green); }
+.w.missed { opacity: .4; text-decoration: line-through; }
+.wait { color: var(--muted); font-size: clamp(1.2rem, 4vw, 2rem); }
+time { display: block; margin-top: 18px; color: var(--muted); font-size: .95rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>💎 BLINGO WINNER<span id="plural"></span> 💎</h1>
+  <div id="list"></div>
+  <time id="at"></time>
+</main>
+<script>
+const q = new URLSearchParams(location.search);
+if (q.get("bg") === "transparent") document.body.classList.add("transparent");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const tag = { claimed: "✅ claimed", missed: "⌛ missed it", waiting: "type !claim in chat" };
+const names = (q.get("w") || "").split(",").map(s => s.trim()).filter(Boolean);
+const states = (q.get("s") || "").split(",");
+document.getElementById("plural").textContent = names.length > 1 ? "S" : "";
+document.getElementById("list").innerHTML = names.length
+  ? names.map((n, i) => `<div class="w ${esc(states[i] || "")}">${esc(n)}${tag[states[i]] ? `<small>${tag[states[i]]}</small>` : ""}</div>`).join("")
+  : `<div class="wait">Waiting for the next Blingo winner…</div>`;
+if (q.get("t")) document.getElementById("at").textContent = new Date(+q.get("t")).toLocaleString();
+if (names.length) document.title = "🏆 " + names.join(", ");
+</script>
+</body>
+</html>

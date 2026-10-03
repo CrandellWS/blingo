@@ -159,18 +159,25 @@ header {
   color: var(--muted); border: 1px dashed var(--card-edge); border-radius: 999px; padding: 4px 10px;
 }
 /* ---- full draw-order recall modal ---- */
-#drawlog {
+#drawlog, #winlog {
   position: fixed; inset: 0; display: none; place-items: center; z-index: 55;
   background: color-mix(in srgb, var(--bg-0) 82%, transparent); backdrop-filter: blur(6px); padding: 20px;
 }
-#drawlog .sheet {
+#drawlog .sheet, #winlog .sheet {
   background: var(--card); border: 1px solid var(--card-edge); border-radius: 20px;
   width: min(520px, 94vw); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden;
 }
-#drawlog .head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--card-edge); }
-#drawlog .head h3 { margin: 0; font-size: 1.3rem; }
-#drawlog .head button { background: none; border: 1px solid var(--card-edge); color: var(--ink); border-radius: 999px; width: 38px; height: 38px; font-size: 1.1rem; cursor: pointer; }
-#logrows { overflow-y: auto; padding: 8px 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+#drawlog .head, #winlog .head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--card-edge); }
+#drawlog .head h3, #winlog .head h3 { margin: 0; font-size: 1.3rem; }
+#drawlog .head button, #winlog .head button { background: none; border: 1px solid var(--card-edge); color: var(--ink); border-radius: 999px; width: 38px; height: 38px; font-size: 1.1rem; cursor: pointer; }
+#logrows, #winrows { overflow-y: auto; padding: 8px 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+#winrows .round { padding: 10px 14px; border-radius: 12px; background: var(--bg-0); border: 1px solid var(--card-edge); }
+#winrows .round time { display: block; font: 600 .8rem var(--font-data); color: var(--muted); margin-bottom: 4px; }
+#winrows .round span { display: inline-block; margin: 2px 10px 2px 0; font: 700 1rem var(--font-data); color: var(--gold); }
+#winrows .round span.missed { color: var(--muted); text-decoration: line-through; }
+#winrows .empty { color: var(--muted); text-align: center; padding: 20px; }
+#winlog .foot { padding: 0 20px 16px; display: flex; gap: 8px; }
+#winlog .foot button { background: var(--bg-0); border: 1px solid var(--card-edge); color: var(--ink); border-radius: 999px; padding: 8px 16px; cursor: pointer; font: inherit; }
 #logrows .row { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-radius: 12px; background: var(--bg-0); border: 1px solid var(--card-edge); }
 #logrows .row .seq { font: 700 .8rem var(--font-data); color: var(--muted); min-width: 38px; }
 #logrows .row .who { font: 700 1rem var(--font-data); }
@@ -246,6 +253,50 @@ header {
   background: linear-gradient(100deg, var(--red), var(--gold)); color: #fff; border: none;
   border-radius: 999px; padding: 13px 38px; font-size: 1.1rem; font-weight: 700;
 }
+#claimBar {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 70; display: none;
+  padding: 10px 26px; border-radius: 999px; background: var(--card); border: 2px solid var(--gold);
+  box-shadow: var(--glow-gold); font: 700 clamp(1rem, 3vw, 1.5rem) var(--font-display); white-space: nowrap;
+}
+#claimBar b { color: var(--gold); font-variant-numeric: tabular-nums; }
+#claimBar.urgent { border-color: var(--red); animation: pulse .5s infinite alternate; }
+#claimBar.done { border-color: var(--green); }
+@keyframes pulse { to { transform: translateX(-50%) scale(1.06); } }
+#winlist div.claimed { border-color: var(--green); }
+#winlist div.missed { opacity: .45; border-color: var(--muted); text-decoration: line-through; }
+#winlist small { display: block; font-size: .55em; color: var(--muted); font-weight: 600; }
+/* thief attempt: a non-winner typed !claim. Six variants, one at a time. */
+#thief { position: fixed; inset: 0; z-index: 80; display: none; place-items: center; pointer-events: none; overflow: hidden; }
+#thief .card { position: relative; text-align: center; padding: 22px 36px; border-radius: 22px; background: var(--card);
+  border: 3px solid var(--red); box-shadow: 0 0 40px color-mix(in srgb, var(--red) 60%, transparent); animation: pop .35s backwards; }
+#thief .who { font: 700 clamp(1.6rem, 5vw, 2.6rem) var(--font-display); }
+#thief .msg { color: var(--muted); font-size: 1.05rem; margin: 4px 0 8px; }
+#thief .bang { font: 700 clamp(2.2rem, 8vw, 4rem) var(--font-display); color: var(--red); text-shadow: 0 0 18px var(--red); letter-spacing: .04em; }
+#thief .fx { font-size: 3rem; line-height: 1; height: 3.4rem; position: relative; }
+#thief .fx i { position: absolute; left: 50%; font-style: normal; }
+/* 1 lasers */
+#thief.lasers::before { content: ""; position: absolute; inset: 0 -60%; background: repeating-linear-gradient(35deg, transparent 0 46px, rgba(255,40,60,.75) 46px 49px);
+  animation: sweep 1.2s ease-in-out 2 alternate; }
+@keyframes sweep { from { transform: translateX(-30%); opacity: .3; } to { transform: translateX(30%); opacity: 1; } }
+/* 2 slap */
+#thief.slap .fx .hand { animation: reach 1.4s ease-in forwards; }
+#thief.slap .fx .slap { opacity: 0; animation: smack .25s 1.1s forwards; }
+@keyframes reach { from { transform: translate(-260%, 0); } to { transform: translate(-60%, 0); } }
+@keyframes smack { 0% { opacity: 1; transform: translate(-50%, -40px) rotate(-40deg) scale(1.8); } 100% { opacity: 1; transform: translate(-90%, 0) rotate(10deg) scale(1.2); } }
+/* 3 busted */
+#thief.busted { animation: siren .35s steps(1) 8; }
+@keyframes siren { 0% { background: rgba(230,50,63,.35); } 50% { background: rgba(62,166,255,.35); } }
+/* 4 trapdoor */
+#thief.trapdoor .who { animation: drop .7s 1.2s ease-in forwards; }
+@keyframes drop { to { transform: translateY(70vh) rotate(25deg); opacity: 0; } }
+/* 5 dodge */
+#thief.dodge .fx .gem { animation: hop 1.6s ease-in-out forwards; }
+#thief.dodge .fx .ninja { animation: lunge 1.6s ease-in forwards; }
+@keyframes hop { 0%,40% { transform: translate(-50%, 0); } 60% { transform: translate(140%, -50px); } 100% { transform: translate(180%, 0); } }
+@keyframes lunge { 0% { transform: translate(-300%, 0); } 55% { transform: translate(-60%, 0); } 100% { transform: translate(-40%, 30px) rotate(80deg); } }
+/* 6 cage */
+#thief.cage .fx .bars { animation: cagedrop .45s 1s cubic-bezier(.5,0,.8,1.4) backwards; }
+@keyframes cagedrop { from { transform: translate(-50%, -60vh); } to { transform: translate(-50%, 0); } }
 .confetti { position: fixed; top: -20px; z-index: 60; font-size: 1.2rem; animation: fall linear forwards; pointer-events: none; }
 
 @keyframes drop { from { transform: translateY(-120%) scale(1.6); } to { transform: none; } }
@@ -270,6 +321,8 @@ header {
   <div class="loadrow">
     <input id="listUrl" type="url" placeholder="…or paste a link to a name list (one name per line)">
     <button id="loadList" class="ghost" type="button">Load</button>
+    <button id="winlogBtn2" class="ghost" type="button">🏆 Winner log</button>
+    <button id="winTabBtn" class="ghost" type="button" title="Opens one tab that always shows the latest winners">🪟 Open winner tab</button>
   </div>
   <div class="chatrow">
     <span class="dot" id="chatDot"></span><span id="chatState">Chat entries off</span>
@@ -295,6 +348,13 @@ header {
       <option value="both">first &amp; last of the line</option>
       <option value="line" selected>the whole line</option>
     </select></label>
+    <label class="knob">✋ claim timer <select id="kClaim">
+      <option value="0">off</option>
+      <option value="30">30 s</option>
+      <option value="60" selected>60 s</option>
+      <option value="90">90 s</option>
+      <option value="120">2 min</option>
+    </select></label>
     <label class="knob">⏱ seconds between draws <input id="kSpeed" type="number" min="0.1" max="60" step="0.1" value="1"></label>
   </div>
   <p class="rules" id="rulesSetup"></p>
@@ -310,6 +370,7 @@ header {
       <button id="pause">⏸ Pause</button>
       <button id="drawNow">🎲 Draw now</button>
       <button id="showWin" style="display:none">🏆 Winners</button>
+      <button id="winlogBtn">🏆 Winner log</button>
       <button id="reset">↩ New game</button>
     </div>
   </header>
@@ -322,15 +383,25 @@ header {
   <div id="boards"></div>
 </section>
 
+<div id="claimBar"></div>
+<div id="thief"></div>
 <div id="party">
   <div>
     <h2>💎 <em id="partyTitle">WINNERS</em> 💎</h2>
     <div id="winlist"></div>
+    <button id="claimRestart" class="ghost" style="display:none">⏱ Restart claim timer</button>
     <button id="viewBoards" class="ghost">👀 View the boards</button>
     <button id="again">Play again</button>
   </div>
 </div>
 
+<div id="winlog">
+  <div class="sheet">
+    <div class="head"><h3>🏆 Winner log</h3><button id="winlogClose" title="Close">✕</button></div>
+    <div id="winrows"></div>
+    <div class="foot"><button id="winlogCopy">📋 Copy</button><button id="winlogClear">🗑 Clear log</button></div>
+  </div>
+</div>
 <div id="drawlog">
   <div class="sheet">
     <div class="head">
@@ -482,6 +553,7 @@ function renderBoards() {
 
 /* ---------- game loop ---------- */
 function begin(names) {
+  claim = null; renderClaim();
   gamePlan = planGame(names);            // pre-solve to a single winning line
   boards = gamePlan.boards;
   pool = gamePlan.order.slice().reverse();   // pool.pop() plays gamePlan.order in sequence
@@ -604,10 +676,149 @@ function checkWins() {
 function finish() {
   over = true; clearInterval(timer);
   $("partyTitle").textContent = !winners.length ? "NO WINNERS" : winners.length === 1 ? "WINNER" : "WINNERS";
-  $("winlist").innerHTML = winners.map((w, i) =>
-    `<div style="animation-delay:${i * .35}s">${CONFIG.marker} ${esc(w)}</div>`).join("");
-  setTimeout(() => { $("party").style.display = "grid"; confettiBurst(40); }, 1200);
+  const secs = +$("kClaim").value;
+  claim = secs && winners.length ? { secs, until: 0, who: new Map(winners.map(w => [w, "waiting"])) } : null;
+  logRound();
+  renderWinlist();
+  updateWinTab(true);
+  setTimeout(() => { $("party").style.display = "grid"; confettiBurst(40); if (claim) startClaim(); }, 1200);
 }
+
+/* ---------- claim timer: winners must type !claim (or !blingo claim) before it runs out ---------- */
+let claim = null, claimTick = null;   // claim = { secs, until, who: Map(name -> waiting|claimed|missed) }
+/* ---------- winner log: every round saved in this browser, so a refresh or New game never loses who won ---------- */
+const LOG_KEY = "blingo.winners";
+const readLog = () => { try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch { return []; } };
+const writeLog = l => { try { localStorage.setItem(LOG_KEY, JSON.stringify(l.slice(0, 200))); } catch {} };
+let roundId = 0;
+function logRound() {
+  if (!winners.length) return;
+  roundId = Date.now();
+  writeLog([{ id: roundId, at: roundId, mode, players: parseNames($("names").value).length,
+              winners: winners.map(w => ({ name: w, status: claim ? "waiting" : "won" })) }, ...readLog()]);
+}
+/* ---------- winner tab: one named tab (winners.html?w=...) kept on the latest winners ----------
+   Opened by the button (a click, so popup blockers allow it); after that we just repoint it. */
+let winTab = null;
+function winTabUrl() {
+  if (!winners.length) return "winners.html";
+  const st = winners.map(w => claim ? claim.who.get(w) : "");
+  return "winners.html?w=" + winners.map(encodeURIComponent).join(",") +
+    (claim ? "&s=" + st.join(",") : "") + "&t=" + (roundId || Date.now());
+}
+function updateWinTab(openIfClosed) {
+  const url = winTabUrl();
+  if (winTab && !winTab.closed) { try { winTab.location.replace(url); return; } catch {} }
+  if (openIfClosed) winTab = window.open(url, "blingoWinners");   // may be blocked outside a click; the button always works
+}
+$("winTabBtn").onclick = () => updateWinTab(true);
+
+function syncLog() {   // copy claim results into this round's log entry
+  if (!claim || !roundId) return;
+  const l = readLog(), r = l.find(x => x.id === roundId);
+  if (!r) return;
+  r.winners.forEach(w => { w.status = claim.who.get(w.name) || w.status; });
+  writeLog(l);
+}
+const statusIcon = { claimed: "✅", missed: "⌛", waiting: "⏳", won: "💎" };
+function renderWinlog() {
+  const l = readLog();
+  $("winrows").innerHTML = l.length ? l.map(r => `<div class="round"><time>${new Date(r.at).toLocaleString()} · ${r.players} players · ${esc(r.mode)}</time>` +
+    r.winners.map(w => `<span class="${w.status}">${statusIcon[w.status] || "💎"} ${esc(w.name)}</span>`).join("") + "</div>").join("")
+    : `<div class="empty">No winners yet. Every Blingo winner lands here and stays, even after a refresh.</div>`;
+}
+const openWinlog = () => { renderWinlog(); $("winlog").style.display = "grid"; };
+$("winlogBtn").onclick = $("winlogBtn2").onclick = openWinlog;
+$("winlogClose").onclick = () => { $("winlog").style.display = "none"; };
+$("winlogCopy").onclick = () => {
+  const txt = readLog().map(r => new Date(r.at).toLocaleString() + ": " + r.winners.map(w => `${w.name} (${w.status})`).join(", ")).join("\n");
+  try { navigator.clipboard.writeText(txt); $("winlogCopy").textContent = "✓ Copied"; } catch { $("winlogCopy").textContent = "Copy failed"; }
+  setTimeout(() => { $("winlogCopy").textContent = "📋 Copy"; }, 1500);
+};
+$("winlogClear").onclick = () => {
+  const b = $("winlogClear");
+  if (b.dataset.armed) { writeLog([]); renderWinlog(); b.textContent = "🗑 Clear log"; delete b.dataset.armed; return; }
+  b.dataset.armed = "1"; b.textContent = "Tap again to clear";   // two taps, no browser dialog
+  setTimeout(() => { b.textContent = "🗑 Clear log"; delete b.dataset.armed; }, 3000);
+};
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("winlog").style.display = "none"; });
+
+function renderWinlist() {
+  syncLog(); if (claim) updateWinTab(false);
+  $("winlist").innerHTML = winners.map((w, i) => {
+    const st = claim ? claim.who.get(w) : "";
+    const tag = st === "claimed" ? "✅ claimed" : st === "missed" ? "⌛ missed it" : st === "waiting" ? "type !claim in chat" : "";
+    return `<div class="${st}" style="animation-delay:${i * .35}s">${CONFIG.marker} ${esc(w)}${tag ? `<small>${tag}</small>` : ""}</div>`;
+  }).join("");
+}
+function startClaim() {
+  for (const [w, st] of claim.who) if (st !== "claimed") claim.who.set(w, "waiting");
+  claim.until = Date.now() + claim.secs * 1000;
+  $("claimRestart").style.display = "none";
+  renderWinlist(); clearInterval(claimTick); claimTick = setInterval(renderClaim, 200); renderClaim();
+}
+function renderClaim() {
+  const bar = $("claimBar");
+  if (!claim) { bar.style.display = "none"; clearInterval(claimTick); return; }
+  const waiting = [...claim.who].filter(([, st]) => st === "waiting").map(([w]) => w);
+  const left = Math.max(0, Math.ceil((claim.until - Date.now()) / 1000));
+  bar.style.display = "block";
+  if (!waiting.length) {
+    bar.className = "done"; bar.innerHTML = "✅ All prizes claimed!";
+    clearInterval(claimTick); return;
+  }
+  if (!left) {
+    waiting.forEach(w => claim.who.set(w, "missed"));
+    bar.className = ""; bar.innerHTML = `⌛ Time's up: ${esc(waiting.join(", "))} missed it`;
+    $("claimRestart").style.display = "inline-block";
+    renderWinlist(); clearInterval(claimTick); return;
+  }
+  bar.className = left <= 10 ? "urgent" : "";
+  bar.innerHTML = `✋ ${esc(waiting.join(", "))}: type <b>!claim</b> in chat · <b>${left}s</b>`;
+}
+function claimAnswer(name) {
+  if (!claim) return over && winners.length ? "💎 No claim needed this round" : "💎 Nothing to claim right now";
+  const w = winners.find(x => x.toLowerCase() === name.toLowerCase());
+  if (!w) return thiefAttempt(name);
+  const st = claim.who.get(w);
+  if (st === "claimed") return `💎 ${w}, you already claimed it!`;
+  if (st === "missed") return `💎 ${w}, sorry, the claim timer ran out`;
+  claim.who.set(w, "claimed"); renderWinlist(); renderClaim(); confettiBurst(25);
+  return `💎 ${w} CLAIMED! 🎉`;
+}
+/* ---------- thief attempts: someone who didn't win types !claim ---------- */
+const THIEVES = [
+  { cls: "lasers",   fx: "🚨",                                        bang: "LASERS TRIPPED", say: "tripped the lasers" },
+  { cls: "slap",     fx: `<i class="hand">🫳</i><i style="transform:translateX(-50%)">💎</i><i class="slap">✋</i>`, bang: "SLAPPED!", say: "got your hand slapped" },
+  { cls: "busted",   fx: "🚓",                                        bang: "BUSTED!",        say: "got busted" },
+  { cls: "trapdoor", fx: "🕳️",                                        bang: "TRAPDOOR!",      say: "fell through the trapdoor" },
+  { cls: "dodge",    fx: `<i class="ninja">🥷</i><i class="gem">💎</i>`, bang: "TOO SLOW!",      say: "watched the diamond run away" },
+  { cls: "cage",     fx: `<i style="transform:translateX(-50%)">🥷</i><i class="bars">⛓️</i>`, bang: "CAGED!", say: "got caged" },
+];
+const thiefQueue = [], thiefSeen = new Map();
+let thiefBusy = false, thiefDeck = [];   // shuffled deck: all six play before any repeats
+function thiefAttempt(name) {
+  const owner = winners.join(" & ");
+  const now = Date.now();
+  if (now - (thiefSeen.get(name.toLowerCase()) || 0) < 15000) return `🚨 ${name}, we saw you the first time. That's ${owner}'s diamond`;
+  thiefSeen.set(name.toLowerCase(), now);
+  if (!thiefDeck.length) thiefDeck = shuffle([...THIEVES.keys()]);
+  const i = thiefDeck.pop();
+  if (thiefQueue.length < 3) thiefQueue.push({ name, owner, t: THIEVES[i] });
+  playThief();
+  return `🚨 Nice try ${name}! You ${THIEVES[i].say}. That's ${owner}'s diamond 💎`;
+}
+function playThief() {
+  if (thiefBusy || !thiefQueue.length) return;
+  thiefBusy = true;
+  const { name, owner, t } = thiefQueue.shift(), el = $("thief");
+  el.className = t.cls;
+  el.innerHTML = `<div class="card"><div class="fx">${t.fx}</div><div class="who">🥷 ${esc(name)}</div>` +
+    `<div class="msg">tried to steal ${esc(owner)}'s diamond</div><div class="bang">${t.bang}</div></div>`;
+  el.style.display = "grid";
+  setTimeout(() => { el.style.display = "none"; el.className = ""; thiefBusy = false; playThief(); }, 3200);
+}
+$("claimRestart").onclick = () => { if (claim) startClaim(); };
 
 /* ---------- UI bits ---------- */
 function renderSockets() {
@@ -663,6 +874,7 @@ $("viewBoards").onclick = () => { $("party").style.display = "none"; $("showWin"
 $("showWin").onclick = () => { $("party").style.display = "grid"; };
 $("reset").onclick = $("again").onclick = () => {
   clearInterval(timer); timer = null; over = true; closeDrawlog();
+  claim = null; renderClaim();
   history.replaceState(null, "", location.pathname);
   $("game").style.display = "none"; $("party").style.display = "none";
   $("showWin").style.display = "none";
@@ -728,12 +940,19 @@ function chatAnswer(user, q) {
   const n = names.length, s = n === 1 ? "" : "s";
   if (cmd === "count") return `💎 ${n} in the Blingo`;
   if (cmd === "list") return n ? `💎 ${n} in: ${names.join(", ")}`.slice(0, 400) : "💎 Nobody in yet. Type !blingo to join";
+  if (cmd === "claim") {
+    const who = (user || "").trim();
+    if (!who || /^[0-9a-f]{8}-[0-9a-f]{4}-|^\d{6,}$/i.test(who)) return "💎 Couldn't read your name, try again in a sec";
+    return claimAnswer(who);
+  }
   if (cmd === "status") {
+    if (claim && [...claim.who.values()].includes("waiting"))
+      return `💎 Waiting on ${[...claim.who].filter(([, s]) => s === "waiting").map(([w]) => w).join(", ")} to type !claim`;
     if (open) return `💎 Blingo entries are OPEN, ${n} in. Type !blingo to join`;
     if (!over) return `💎 Blingo is running, last call ${drawn[0] ? callLabel(drawn[0]) : "coming up"}`;
     return winners.length ? `💎 Blingo winner${winners.length > 1 ? "s" : ""}: ${winners.join(", ")}` : "💎 Blingo is over";
   }
-  if (cmd !== "join" && cmd !== "enter" && cmd !== "in") return "💎 !blingo to join · !blingo count · !blingo list · !blingo status";
+  if (cmd !== "join" && cmd !== "enter" && cmd !== "in") return "💎 !blingo to join · !blingo count · !blingo list · !blingo status · !claim";
   // $(user) sometimes arrives as a raw MyPrize id instead of a name: don't add it, don't echo it.
   const name = (user || "").trim();
   if (!name || /^[0-9a-f]{8}-[0-9a-f]{4}-|^\d{6,}$/i.test(name)) return "💎 Couldn't read your name, try again in a sec";

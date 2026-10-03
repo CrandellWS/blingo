@@ -37,3 +37,10 @@ MIT. Go make someone's chat sparkle.
 ## Chat entries (Slot Tools)
 
 Viewers can join from MyPrize chat with `!blingo`. Click **💬 Take entries from chat** on the setup screen, then **Show Slot Tools command**, and paste that line as the Response of a Slot Tools custom command named `blingo` (Permission: Everyone). `!blingo count`, `!blingo list` and `!blingo status` also work. It only answers while the tab is open; the relay in `relay/` is a Cloudflare Worker that just passes messages to the tab.
+
+## Claim timer, winner log, winner tab
+
+- **Claim timer** (setup: off / 30 s / 60 s / 90 s / 2 min): after the win a countdown bar asks the winner to type `!claim` (a second Slot Tools command with the same URL plus `&q=claim`, or `!blingo claim`). Claimed winners go green; when time runs out they're marked missed and a Restart button appears.
+- **Thief attempts**: anyone else who types `!claim` triggers one of six on-stream animations (lasers, slap, busted, trapdoor, dodge, cage) and gets called out in chat. Repeat tries within 15 s get a reply but no new animation.
+- **Winner log** (🏆 button): every round's winners and claim results are saved in this browser, so a refresh or an accidental New game never loses who won. Copy or clear it from the log.
+- **Winner tab** (🪟 button): opens one `winners.html?w=Name1,Name2` tab that updates itself with each new winner and claim. Add `&bg=transparent` for OBS.
