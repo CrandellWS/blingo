@@ -33,3 +33,7 @@ Fonts load from Google Fonts with system fallbacks, so the page still works full
 ## License
 
 MIT. Go make someone's chat sparkle.
+
+## Chat entries (Slot Tools)
+
+Viewers can join from MyPrize chat with `!blingo`. Click **💬 Take entries from chat** on the setup screen, then **Show Slot Tools command**, and paste that line as the Response of a Slot Tools custom command named `blingo` (Permission: Everyone). `!blingo count`, `!blingo list` and `!blingo status` also work. It only answers while the tab is open; the relay in `relay/` is a Cloudflare Worker that just passes messages to the tab.

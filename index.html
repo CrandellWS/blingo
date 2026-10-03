@@ -90,6 +90,10 @@ button { font: inherit; cursor: pointer; }
 .chatrow { margin-top: 10px; font-size: 14px; color: var(--muted); }
 .chatrow .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: middle; }
 .chatrow .dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.chatguide { margin-top: 8px; text-align: left; max-width: 560px; margin-inline: auto; font-size: 14px; color: var(--muted); }
+.chatguide summary { cursor: pointer; color: var(--ink); text-align: center; }
+.chatguide ol { margin: 8px 0 0; padding-left: 22px; line-height: 1.6; }
+.chatguide code { color: var(--ink); }
 #chatCmd { display: none; width: 100%; margin-top: 8px; padding: 8px 10px; border-radius: 10px;
   border: 1px solid var(--card-edge); background: var(--card); color: var(--ink); font: 12px/1.4 var(--font-data); }
 .knobs { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 18px 0 24px; }
@@ -272,6 +276,17 @@ header {
     <button id="chatToggle" class="ghost" type="button">💬 Take entries from chat</button>
     <button id="chatShow" class="ghost" type="button" style="display:none">Show Slot Tools command</button>
     <input id="chatCmd" readonly title="Paste this as the reply of a !blingo command in Slot Tools (mods only — it holds your secret key)">
+    <details class="chatguide">
+      <summary>📖 How to set up chat entries</summary>
+      <ol>
+        <li>Click <b>💬 Take entries from chat</b>. The dot turns green when it's live.</li>
+        <li>Click <b>Show Slot Tools command</b> and copy the line (it holds your private key, so don't show it on stream).</li>
+        <li>In Slot Tools, open <b>Add Custom Command</b>: Command <code>blingo</code>, Response = the line you copied, Permission <b>Everyone</b>, then <b>Add</b>.</li>
+        <li>Keep this tab open. Viewers type <code>!blingo</code> to join while this setup screen is showing, and names land in the box above.</li>
+        <li>Also works: <code>!blingo count</code>, <code>!blingo list</code>, <code>!blingo status</code> (shows the winner after the game).</li>
+        <li>Tab closed = the command stays quiet. Same browser keeps the same key; a new computer or cleared browser data means pasting a new command.</li>
+      </ol>
+    </details>
   </div>
   <div class="knobs">
     <label class="knob">🏆 winners <select id="kMode">
