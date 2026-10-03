@@ -79,6 +79,19 @@ button { font: inherit; cursor: pointer; }
   padding: 16px; font: 500 1rem/1.6 var(--font-data);
 }
 #names:focus { outline: 2px solid var(--pink); box-shadow: var(--glow-pink); }
+.loadrow { display: flex; gap: 8px; margin-top: 10px; }
+.loadrow input {
+  flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--card-edge); background: var(--card); color: var(--ink);
+  font: inherit; font-size: 14px;
+}
+.loadrow input:focus { outline: 2px solid var(--pink); }
+.loadrow button { white-space: nowrap; }
+.chatrow { margin-top: 10px; font-size: 14px; color: var(--muted); }
+.chatrow .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: middle; }
+.chatrow .dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+#chatCmd { display: none; width: 100%; margin-top: 8px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--card-edge); background: var(--card); color: var(--ink); font: 12px/1.4 var(--font-data); }
 .knobs { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 18px 0 24px; }
 .knob {
   background: var(--card); border: 1px solid var(--card-edge); border-radius: 12px;
@@ -250,6 +263,16 @@ header {
   <img class="logo-img" src="logo.webp" alt="Blingo — the relatable bingo">
   <p class="tagline">Drop in your chat names, hit start, diamonds do the rest.</p>
   <textarea id="names" placeholder="One name per line (commas and spaces work too)&#10;&#10;KingCuzzo&#10;Shayla&#10;PixelPirate&#10;..." autofocus></textarea>
+  <div class="loadrow">
+    <input id="listUrl" type="url" placeholder="…or paste a link to a name list (one name per line)">
+    <button id="loadList" class="ghost" type="button">Load</button>
+  </div>
+  <div class="chatrow">
+    <span class="dot" id="chatDot"></span><span id="chatState">Chat entries off</span>
+    <button id="chatToggle" class="ghost" type="button">💬 Take entries from chat</button>
+    <button id="chatShow" class="ghost" type="button" style="display:none">Show Slot Tools command</button>
+    <input id="chatCmd" readonly title="Paste this as the reply of a !blingo command in Slot Tools (mods only — it holds your secret key)">
+  </div>
   <div class="knobs">
     <label class="knob">🏆 winners <select id="kMode">
       <option value="first">first pick of the line</option>
@@ -315,6 +338,7 @@ const CONFIG = {
   historyLen: 12,
   marker: "💎",
   planAttempts: 2000,    // rerolls to find a single-winning-line game before falling back
+  relayBase: "https://blingo-relay.floral-meadow-2593.workers.dev",   // relay/ Worker; ?relay=<url> overrides
 };
 
 const $ = id => document.getElementById(id);
@@ -330,6 +354,63 @@ function parseNames(text) {
   return text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
     .filter(n => { const k = n.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
 }
+
+/* ---------- pull a name list off a URL ----------
+   Tolerant on purpose: whatever she can publish, this should swallow.
+   Plain text one-per-line, a JSON array of strings, a JSON array of objects
+   with a username-ish field, a wrapper object with the array inside, or a
+   single-column CSV export.                                               */
+const NAME_KEYS = ["username", "name", "user", "displayName", "display_name", "handle", "nickname"];
+
+function namesFromPayload(text) {
+  try {
+    let j = JSON.parse(text);
+    if (j && !Array.isArray(j)) {
+      const arr = ["results", "entries", "entrants", "users", "names", "data", "items"]
+        .map(k => j[k]).find(Array.isArray);
+      if (arr) j = arr;
+    }
+    if (Array.isArray(j)) {
+      return j.map(v => {
+        if (typeof v === "string") return v;
+        if (v && typeof v === "object") { for (const k of NAME_KEYS) if (typeof v[k] === "string") return v[k]; }
+        return "";
+      }).filter(Boolean).join("\n");
+    }
+  } catch (_) { /* not JSON — fall through to text */ }
+
+  // CSV: every row carrying the same comma count means columns, not names.
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const counts = new Set(lines.map(l => (l.match(/,/g) || []).length));
+  if (lines.length > 1 && counts.size === 1 && !counts.has(0)) {
+    const col = lines.map(l => l.split(",")[0].trim().replace(/^"|"$/g, ""));
+    if (/^(name|username|user|entrant)$/i.test(col[0])) col.shift();   // drop a header
+    return col.join("\n");
+  }
+  return text;
+}
+
+async function loadList(url) {
+  const err = $("err");
+  err.textContent = "Loading names…";
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) { err.textContent = `That link answered ${res.status}. Check it's public.`; return; }
+    const names = parseNames(namesFromPayload(await res.text()));
+    if (!names.length) { err.textContent = "Fetched it, but found no names in there."; return; }
+    $("names").value = names.join("\n");
+    err.textContent = `Loaded ${names.length} name${names.length === 1 ? "" : "s"}.`;
+  } catch (e) {
+    // Almost always CORS — the browser blocks it before we see a response.
+    err.textContent = "Couldn't read that link from the browser. It needs to allow cross-origin requests — a raw GitHub gist or a published Google Sheet CSV both work.";
+  }
+}
+
+$("loadList").onclick = () => {
+  const u = $("listUrl").value.trim();
+  if (u) loadList(u); else $("err").textContent = "Paste a link first.";
+};
+$("listUrl").addEventListener("keydown", e => { if (e.key === "Enter") $("loadList").click(); });
 
 $("start").onclick = () => {
   const names = parseNames($("names").value);
@@ -588,7 +669,107 @@ function updateRules() {
 $("kMode").addEventListener("input", updateRules);
 updateRules();
 
+/* ---------- chat entries via Slot Tools $(urlfetch) ----------
+   Slot Tools -> relay Worker (relay/) -> this tab over a WebSocket -> reply text -> chat.
+   One command:  !blingo  -> $(urlfetch <relay>/c/<key>?user=$(user)&q=$(query))
+     !blingo            join (only while the setup screen is open)
+     !blingo count      how many are in
+     !blingo list       who is in (first ~400 chars)
+     !blingo status     open / running / winners
+   Tab closed => the relay answers empty and nothing posts.                       */
+const RELAY = new URLSearchParams(location.search).get("relay") || CONFIG.relayBase;
+const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+let chatKey = store.get("blingo.chatKey"), chatWs = null, chatOn = false, chatPing = null;
+
+function chatSetState(on, msg) {
+  $("chatDot").classList.toggle("on", on);
+  $("chatState").textContent = msg;
+}
+function chatConnect() {
+  if (!chatOn) return;
+  chatWs = new WebSocket(RELAY.replace(/^http/, "ws") + "/ws/" + chatKey);
+  chatWs.onopen = () => chatSetState(true, "Chat entries live");
+  chatWs.onmessage = e => {
+    if (e.data === "pong") return;
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    chatWs.send(JSON.stringify({ id: m.id, text: chatAnswer(m.user, m.q) }));
+  };
+  chatWs.onclose = e => {
+    chatSetState(false, e.code === 4000 ? "Chat entries moved to another tab" : "Chat entries reconnecting…");
+    if (chatOn && e.code !== 4000) setTimeout(chatConnect, 3000);
+  };
+}
+function chatAnswer(user, q) {
+  const cmd = (q || "").trim().toLowerCase().split(/\s+/)[0] || "join";
+  const names = parseNames($("names").value);
+  const open = $("setup").style.display !== "none";
+  const n = names.length, s = n === 1 ? "" : "s";
+  if (cmd === "count") return `💎 ${n} in the Blingo`;
+  if (cmd === "list") return n ? `💎 ${n} in: ${names.join(", ")}`.slice(0, 400) : "💎 Nobody in yet. Type !blingo to join";
+  if (cmd === "status") {
+    if (open) return `💎 Blingo entries are OPEN, ${n} in. Type !blingo to join`;
+    if (!over) return `💎 Blingo is running, last call ${drawn[0] ? callLabel(drawn[0]) : "coming up"}`;
+    return winners.length ? `💎 Blingo winner${winners.length > 1 ? "s" : ""}: ${winners.join(", ")}` : "💎 Blingo is over";
+  }
+  if (cmd !== "join" && cmd !== "enter" && cmd !== "in") return "💎 !blingo to join · !blingo count · !blingo list · !blingo status";
+  // $(user) sometimes arrives as a raw MyPrize id instead of a name: don't add it, don't echo it.
+  const name = (user || "").trim();
+  if (!name || /^[0-9a-f]{8}-[0-9a-f]{4}-|^\d{6,}$/i.test(name)) return "💎 Couldn't read your name, try again in a sec";
+  if (!open) return over ? "💎 That Blingo is done, watch for the next one" : "💎 Blingo already started, catch the next one";
+  if (names.some(x => x.toLowerCase() === name.toLowerCase())) return `💎 ${name}, you're already in (${n} entered)`;
+  $("names").value = names.concat(name).join("\n");
+  return `💎 ${name} you're in! ${n + 1} entered`;
+}
+function chatCommand() {
+  return `$(urlfetch ${RELAY}/c/${chatKey}?user=$(user)&q=$(query))`;
+}
+$("chatToggle").onclick = () => {
+  chatOn = !chatOn;
+  if (chatOn) {
+    if (!chatKey) {
+      chatKey = Array.from(crypto.getRandomValues(new Uint8Array(18)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 24);
+      store.set("blingo.chatKey", chatKey);
+    }
+    $("chatToggle").textContent = "Stop chat entries";
+    $("chatShow").style.display = "inline-block";
+    chatSetState(false, "Chat entries connecting…");
+    chatConnect();
+    clearInterval(chatPing); chatPing = setInterval(() => chatWs && chatWs.readyState === 1 && chatWs.send("ping"), 30000);
+  } else {
+    clearInterval(chatPing); if (chatWs) chatWs.close(1000);
+    $("chatToggle").textContent = "💬 Take entries from chat";
+    $("chatShow").style.display = "none"; $("chatCmd").style.display = "none";
+    chatSetState(false, "Chat entries off");
+  }
+  store.set("blingo.chatOn", chatOn ? "1" : "");
+};
+// Hidden by default: the command holds the secret key, so don't flash it on stream.
+$("chatShow").onclick = () => {
+  const box = $("chatCmd"), showing = box.style.display === "block";
+  box.style.display = showing ? "none" : "block";
+  $("chatShow").textContent = showing ? "Show Slot Tools command" : "Hide command";
+  if (!showing) { box.value = chatCommand(); box.select(); }
+};
+if (store.get("blingo.chatOn")) $("chatToggle").click();
+
 /* ---------- deep links: #n=alice,bob&w=5&s=4&go=1 ---------- */
+(function fromList() {
+  const q = new URLSearchParams(location.search);
+  const h = new URLSearchParams(location.hash.slice(1));
+  const url = q.get("list") || h.get("list");
+  if (!url) return;
+  $("listUrl").value = url;
+  loadList(url).then(() => {
+    if (!(q.get("go") || h.get("go"))) return;
+    const names = parseNames($("names").value);
+    if (names.length < 2) return;
+    mode = $("kMode").value;
+    speed = Math.max(0.1, +(q.get("s") || h.get("s")) || 1) * 1000;
+    begin(names);
+  });
+})();
+
 (function fromHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   if (!p.get("n")) return;
