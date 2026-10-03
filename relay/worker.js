@@ -47,6 +47,20 @@ async function leaderboard(url, ctx) {
   const board = m.leaderboard || [];
   const name = (e, r) => !e.username || e.username === "Hidden" ? `${ORD(r)} place winner` : e.username;
 
+  // &show=prizes: the payout ranges in one short line, e.g. "1st 100 · 2nd 75 · 4th-10th 25 each".
+  if (url.searchParams.get("show") === "prizes") {
+    if (!places.length) return text(`🏆 ${m.name}: no paid places listed`);
+    const sorted = [...places].sort((x, y) => x.start - y.start);
+    let pool = 0, paid = 0;
+    const parts = sorted.map(p => {
+      const end = p.end ?? p.start, amt = p.rewards?.mission_promo_amounts?.SC?.amount || 0, cnt = end - p.start + 1;
+      pool += amt * cnt; paid = Math.max(paid, end);
+      return end === p.start ? `${ORD(p.start)} ${sc(amt)}` : `${ORD(p.start)}-${ORD(end)} ${sc(amt)} each`;
+    });
+    const ends = new Date(m.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
+    return text(`🏆 ${m.name}: ${parts.join(" · ")} · top ${paid} paid, ${sc(pool)} total, ends ${ends}`.slice(0, 400));
+  }
+
   // &show=bar: the bottom paid rung, i.e. what you have to beat to get paid.
   if (url.searchParams.get("show") === "bar") {
     const paid = places.reduce((n, p) => Math.max(n, p.end ?? p.start), 0);
