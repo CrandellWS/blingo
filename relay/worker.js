@@ -40,7 +40,7 @@ export class Room {
     const url = new URL(req.url);
     const tab = this.state.getWebSockets()[0];
     // No page open: say so instead of posting nothing. A command can override it with &off=<text>.
-    if (!tab) return text((url.searchParams.get("off") || "🎮 This game isn't running right now. Check back when the stream starts it!").slice(0, 400));
+    if (!tab) return text((url.searchParams.get("off") || "🎮 This game isn't live right now.").slice(0, 400));
 
     const id = crypto.randomUUID();
     const reply = new Promise(resolve => {
