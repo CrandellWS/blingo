@@ -22,24 +22,24 @@ async function leaderboard(url, ctx) {
   const room = (url.searchParams.get("room") || "").trim().toLowerCase();
   const n = Math.min(5, Math.max(1, +url.searchParams.get("n") || 3));
   if (!room) return text("🏆 Add ?room=YourRoomName to the command");
-  const cache = caches.default, ck = new Request("https://lb.cache/missions");
-  let res = await cache.match(ck);
-  if (!res) {
-    // The list is paged (default 20): read every page so no room falls off the end.
-    const all = [];
-    for (let page = 1; page <= 5; page++) {
-      const live = await fetch(`https://myprize.us/api/missions?page=${page}&page_size=100`, { headers: { accept: "application/json" } });
-      if (!live.ok) { if (page === 1) return text("🏆 Leaderboard is unavailable right now"); break; }
-      const batch = (await live.json()).results || [];
-      all.push(...batch);
-      if (batch.length < 100) break;
+  // Room slug -> id -> only that room's missions (MyPrize filters by room_id, so no paging).
+  const get = async (path, ttl) => {
+    const cache = caches.default, ck = new Request("https://lb.cache/" + path);
+    let res = await cache.match(ck);
+    if (!res) {
+      const live = await fetch("https://myprize.us/api/" + path, { headers: { accept: "application/json" } });
+      if (!live.ok) return null;
+      res = new Response(await live.text(), { headers: { "cache-control": `max-age=${ttl}`, "content-type": "application/json" } });
+      ctx.waitUntil(cache.put(ck, res.clone()));
     }
-    res = new Response(JSON.stringify({ results: all }), { headers: { "cache-control": "max-age=60", "content-type": "application/json" } });
-    ctx.waitUntil(cache.put(ck, res.clone()));
-  }
+    return res.json();
+  };
+  const info = await get(`rooms/slug/${encodeURIComponent(room)}`, 3600);
+  if (!info || !info.id) return text("🏆 Couldn't find that MyPrize room");
+  const list = await get(`missions?room_id=${info.id}`, 60);
+  if (!list) return text("🏆 Leaderboard is unavailable right now");
   const now = Date.now();
-  const missions = ((await res.json()).results || []).filter(m =>
-    m.type === "leaderboard" && String(m.room_name || "").toLowerCase() === room && new Date(m.end_date).getTime() > now);
+  const missions = (list.results || []).filter(m => m.type === "leaderboard" && new Date(m.end_date).getTime() > now);
   const m = missions[0];
   if (!m) return text("🏆 No active leaderboard for that room right now");
   const places = (m.details && m.details.places) || [];
