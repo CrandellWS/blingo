@@ -695,7 +695,13 @@ updateRules();
 const RELAY = new URLSearchParams(location.search).get("relay") || CONFIG.relayBase;
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
                 set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
-let chatKey = store.get("blingo.chatKey"), chatWs = null, chatOn = false, chatPing = null;
+// ?key=<k> pins a key handed out ahead of time, then drops it from the address bar.
+const urlKey = new URLSearchParams(location.search).get("key");
+if (urlKey && /^[A-Za-z0-9_-]{16,64}$/.test(urlKey)) {
+  store.set("blingo.chatKey", urlKey); store.set("blingo.chatOn", "1");
+  const u = new URL(location.href); u.searchParams.delete("key"); history.replaceState(null, "", u);
+}
+let chatKey = urlKey || store.get("blingo.chatKey"), chatWs = null, chatOn = false, chatPing = null;
 
 function chatSetState(on, msg) {
   $("chatDot").classList.toggle("on", on);
