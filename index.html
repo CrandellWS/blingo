@@ -748,7 +748,7 @@ function renderWinlist() {
   $("winlist").innerHTML = winners.map((w, i) => {
     const st = claim ? claim.who.get(w) : "";
     const tag = st === "claimed" ? "✅ claimed" : st === "missed" ? "⌛ missed it" : st === "waiting" ? "type !claim in chat" : "";
-    return `<div class="${st}" style="animation-delay:${i * .35}s">${CONFIG.marker} ${esc(w)}${tag ? `<small>${tag}</small>` : ""}</div>`;
+    return `<div class="${st}" data-i="${i}" title="${claim ? "Tap to mark claimed" : ""}" style="animation-delay:${i * .35}s;${claim ? "cursor:pointer" : ""}">${CONFIG.marker} ${esc(w)}${tag ? `<small>${tag}</small>` : ""}</div>`;
   }).join("");
 }
 function startClaim() {
@@ -759,19 +759,20 @@ function startClaim() {
 }
 function renderClaim() {
   const bar = $("claimBar");
-  if (!claim) { bar.style.display = "none"; clearInterval(claimTick); return; }
+  if (claim && !claimTick && Date.now() < claim.until) claimTick = setInterval(renderClaim, 200);
+  if (!claim) { bar.style.display = "none"; clearInterval(claimTick); claimTick = null; return; }
   const waiting = [...claim.who].filter(([, st]) => st === "waiting").map(([w]) => w);
   const left = Math.max(0, Math.ceil((claim.until - Date.now()) / 1000));
   bar.style.display = "block";
   if (!waiting.length) {
     bar.className = "done"; bar.innerHTML = "✅ All prizes claimed!";
-    clearInterval(claimTick); return;
+    clearInterval(claimTick); claimTick = null; return;
   }
   if (!left) {
     waiting.forEach(w => claim.who.set(w, "missed"));
     bar.className = ""; bar.innerHTML = `⌛ Time's up: ${esc(waiting.join(", "))} missed it`;
     $("claimRestart").style.display = "inline-block";
-    renderWinlist(); clearInterval(claimTick); return;
+    renderWinlist(); clearInterval(claimTick); claimTick = null; return;
   }
   bar.className = left <= 10 ? "urgent" : "";
   bar.innerHTML = `✋ ${esc(waiting.join(", "))}: type <b>!claim</b> in chat · <b>${left}s</b>`;
@@ -818,6 +819,13 @@ function playThief() {
   el.style.display = "grid";
   setTimeout(() => { el.style.display = "none"; el.className = ""; thiefBusy = false; playThief(); }, 3200);
 }
+// Streamer shortcut: tap a winner's name to mark them claimed (or tap again to undo).
+$("winlist").onclick = e => {
+  const row = e.target.closest("[data-i]"), w = row && winners[+row.dataset.i];
+  if (!claim || !w) return;
+  claim.who.set(w, claim.who.get(w) === "claimed" ? (Date.now() < claim.until ? "waiting" : "missed") : "claimed");
+  renderWinlist(); renderClaim();
+};
 $("claimRestart").onclick = () => { if (claim) startClaim(); };
 
 /* ---------- UI bits ---------- */

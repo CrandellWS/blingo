@@ -40,7 +40,7 @@ Viewers can join from MyPrize chat with `!blingo`. Click **💬 Take entries fro
 
 ## Claim timer, winner log, winner tab
 
-- **Claim timer** (setup: off / 30 s / 60 s / 90 s / 2 min): after the win a countdown bar asks the winner to type `!claim` (a second Slot Tools command with the same URL plus `&q=claim`, or `!blingo claim`). Claimed winners go green; when time runs out they're marked missed and a Restart button appears.
+- **Claim timer** (setup: off / 30 s / 60 s / 90 s / 2 min): after the win a countdown bar asks each winner to type `!claim`, or the streamer taps a winner's name to mark them claimed (tap again to undo) (a second Slot Tools command with the same URL plus `&q=claim`, or `!blingo claim`). Claimed winners go green; when time runs out they're marked missed and a Restart button appears.
 - **Thief attempts**: anyone else who types `!claim` triggers one of six on-stream animations (lasers, slap, busted, trapdoor, dodge, cage) and gets called out in chat. Repeat tries within 15 s get a reply but no new animation.
 - **Winner log** (🏆 button): every round's winners and claim results are saved in this browser, so a refresh or an accidental New game never loses who won. Copy or clear it from the log.
 - **Winner tab** (🪟 button): opens one `winners.html?w=Name1,Name2` tab that updates itself with each new winner and claim. Add `&bg=transparent` for OBS.
