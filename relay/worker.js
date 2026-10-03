@@ -4,7 +4,7 @@
    GET /ws/<key>                          the Blingo tab connects here (WebSocket).
 
    <key> is a random secret the tab generates. One key = one room (a Durable Object).
-   No tab connected, or no answer inside 3.5s => empty body, so nothing posts in chat.
+   No tab connected => a short "not running" line (override with &off=...); no answer inside 3.5s => empty body.
    The relay holds no game state; all logic lives in index.html.                        */
 
 const KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -37,10 +37,11 @@ export class Room {
       return new Response(null, { status: 101, webSocket: client });
     }
 
-    const tab = this.state.getWebSockets()[0];
-    if (!tab) return text("");
-
     const url = new URL(req.url);
+    const tab = this.state.getWebSockets()[0];
+    // No page open: say so instead of posting nothing. A command can override it with &off=<text>.
+    if (!tab) return text((url.searchParams.get("off") || "🎮 This game isn't running right now. Check back when the stream starts it!").slice(0, 400));
+
     const id = crypto.randomUUID();
     const reply = new Promise(resolve => {
       this.pending.set(id, resolve);
