@@ -44,14 +44,21 @@ async function leaderboard(url, ctx) {
   if (!m) return text("🏆 No active leaderboard for that room right now");
   const places = (m.details && m.details.places) || [];
   const prize = rank => { const p = places.find(x => rank >= x.start && rank <= (x.end ?? x.start)); return p ? p.rewards?.mission_promo_amounts?.SC?.amount : 0; };
-  const rows = (m.leaderboard || []).slice(0, n).map((e, i) => {
-    const r = i + 1, who = !e.username || e.username === "Hidden" ? `${ORD(r)} place winner` : e.username;
-    const p = prize(r);
-    return `${MEDALS[i] || r + "."} ${who}: ${sc(e.score)} wagered${p ? ` (wins ${sc(p)})` : ""}`;
-  });
+  const board = m.leaderboard || [];
+  const name = (e, r) => !e.username || e.username === "Hidden" ? `${ORD(r)} place winner` : e.username;
+
+  // &show=bar: the bottom paid rung, i.e. what you have to beat to get paid.
+  if (url.searchParams.get("show") === "bar") {
+    const paid = places.reduce((n, p) => Math.max(n, p.end ?? p.start), 0);
+    if (!paid) return text(`🏆 ${m.name}: no paid places listed`);
+    if (board.length < paid) return text(`🏆 ${m.name}: ${paid} places pay and only ${board.length} on the board. Any wager gets you paid! (last spot wins ${sc(prize(paid))})`);
+    const e = board[paid - 1];
+    return text(`🏆 ${m.name}: the bar is ${ORD(paid)} place at ${sc(e.score)} wagered (wins ${sc(prize(paid))}). Beat ${sc(e.score)} to get paid 💰`);
+  }
+
+  const rows = board.slice(0, n).map((e, i) => `${MEDALS[i] || (i + 1) + "."} ${name(e, i + 1)} ${sc(e.score)}`);
   if (!rows.length) return text(`🏆 ${m.name}: nobody on the board yet`);
-  const ends = new Date(m.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
-  return text(`🏆 ${m.name} (ends ${ends}) ${rows.join(" | ")}`.slice(0, 400));
+  return text(`🏆 ${m.name} · ${rows.join(" · ")}`.slice(0, 400));
 }
 
 export default {
