@@ -1,14 +1,21 @@
-/* Blingo relay — a dumb pipe between Slot Tools $(urlfetch) and the streamer's open Blingo tab.
+/* Chat Play relay — a dumb pipe between ANY chat bot's URL fetch and the streamer's open game tab.
+   Drop-in superset of blingo-relay (same routes, same /lb), plus multi-bot input and abuse limits.
 
-   GET /c/<key>?user=$(user)&q=$(query)   Slot Tools hits this; the tab answers in plain text.
-   GET /ws/<key>                          the Blingo tab connects here (WebSocket).
+   GET /c/XXXXX-XXXXX?user=..&q=..&p=..   the bot hits this; the tab answers in plain text (<= 400 chars).
+       BotRix     fetch[<relay>/c/XXXXX-XXXXX?p=$(platform)&q=$(v1 join)&user=$(urlencode $(sender))]
+       Slot Tools $(urlfetch <relay>/c/XXXXX-XXXXX?user=$(user)&q=$(query))            (MyPrize; unchanged)
+       others     see streamer-games chat/BOTS.md (or the bot picker on the page)
+   GET /ws/<key>                     the game tab connects here (WebSocket).
 
-   <key> is a random secret the tab generates. One key = one room (a Durable Object).
+   <key> is a random secret the tab generates (XXXXX-XXXXX). One key = one room (a Durable Object).
+   GET /ws/<key>?owner=<token> claims the key for that page; another owner is refused (close 4001)
+   until the key has been idle 24h, then the room's storage is wiped by an alarm (see bots.js).
    No tab connected => a short "not running" line (override with &off=...); no answer inside 3.5s => empty body.
-   The relay holds no game state; all logic lives in index.html.                        */
+   Over the rate limit => empty body. The relay holds no game state; all logic lives in the page.        */
 
-const KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
-const WAIT_MS = 3500;              // Slot Tools gives up at 5s
+import { readRequest, safeReply, Limiter, normalizeKey, decideClaim, IDLE_MS } from "./bots.js";
+
+const WAIT_MS = 3500;              // Slot Tools gives up at 5s; StreamElements at 15s
 const text = (body, status = 200) => new Response(body, {
   status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
 });
@@ -79,9 +86,11 @@ export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (url.pathname === "/lb") return leaderboard(url, ctx);
-    const [, kind, key] = url.pathname.split("/");
-    if (!KEY_RE.test(key || "") || (kind !== "c" && kind !== "ws")) return text("blingo relay", 404);
-    return env.ROOM.get(env.ROOM.idFromName(key)).fetch(req);
+    const [, kind, raw] = url.pathname.split("/");
+    const key = normalizeKey(raw);
+    if (!key || (kind !== "c" && kind !== "ws")) return text(kind === "c" ? "🎮 That game key isn't valid. Copy the command again from your game page." : "chat play relay", 404);
+    const fwd = new Request(req); fwd.headers.set("x-room-key", key);
+    return env.ROOM.get(env.ROOM.idFromName(key)).fetch(fwd);
   },
 };
 
@@ -89,22 +98,36 @@ export class Room {
   constructor(state) {
     this.state = state;
     this.pending = new Map();
+    this.limit = new Limiter();       // in memory: resets when the object sleeps, which is fine for spam control
     // Keepalive pings from the tab are answered without waking the object.
     state.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
   async fetch(req) {
     if (req.headers.get("Upgrade") === "websocket") {
-      for (const old of this.state.getWebSockets()) old.close(4000, "replaced by a newer tab");
+      const owner = new URL(req.url).searchParams.get("owner") || "";
+      const stored = await this.state.storage.get("claim");
+      const now = Date.now(), live = this.state.getWebSockets().length > 0;
+      const verdict = decideClaim({ key: req.headers.get("x-room-key") || "", owner, stored, live, now });
       const { 0: client, 1: server } = new WebSocketPair();
+      if (verdict === "refuse") {
+        // Accept, then close with a code the page understands: it mints a fresh key and asks for a re-paste.
+        server.accept(); server.close(4001, "key belongs to another page");
+        return new Response(null, { status: 101, webSocket: client });
+      }
+      for (const old of this.state.getWebSockets()) old.close(4000, "replaced by a newer tab");
+      if (verdict === "claim") await this.state.storage.put("claim", { owner, seen: now });
+      await this.state.storage.setAlarm(now + IDLE_MS);
       this.state.acceptWebSocket(server);
       return new Response(null, { status: 101, webSocket: client });
     }
 
     const url = new URL(req.url);
+    const { user, q, platform, h } = readRequest(url, req.headers);
+    if (!this.limit.allow(user)) return text("");
     const tab = this.state.getWebSockets()[0];
     // No page open: say so instead of posting nothing. A command can override it with &off=<text>.
-    if (!tab) return text((url.searchParams.get("off") || "🎮 This game isn't live right now.").slice(0, 400));
+    if (!tab) return text(safeReply(url.searchParams.get("off") || "🎮 This game isn't live right now."));
 
     const id = crypto.randomUUID();
     const reply = new Promise(resolve => {
@@ -112,7 +135,7 @@ export class Room {
       setTimeout(() => { this.pending.delete(id); resolve(""); }, WAIT_MS);
     });
     try {
-      tab.send(JSON.stringify({ id, user: url.searchParams.get("user") || "", q: url.searchParams.get("q") || "" }));
+      tab.send(JSON.stringify({ id, user, q, platform, h }));
     } catch { return text(""); }
     return text(await reply);
   }
@@ -122,8 +145,22 @@ export class Room {
     const resolve = this.pending.get(m.id);
     if (!resolve) return;
     this.pending.delete(m.id);
-    resolve(String(m.text ?? "").slice(0, 400));
+    resolve(safeReply(m.text));
   }
 
-  webSocketClose(ws, code) { try { ws.close(code, "bye"); } catch {} }
+  async webSocketClose(ws, code) {
+    try { ws.close(code, "bye"); } catch {}
+    const claim = await this.state.storage.get("claim");
+    if (claim) await this.state.storage.put("claim", { ...claim, seen: Date.now() });
+    await this.state.storage.setAlarm(Date.now() + IDLE_MS);
+  }
+
+  /* 24h after the last page left: forget the key entirely, so it can never be reused by accident. */
+  async alarm() {
+    const now = Date.now();
+    if (this.state.getWebSockets().length) return this.state.storage.setAlarm(now + IDLE_MS);
+    const claim = await this.state.storage.get("claim");
+    if (claim && now - (claim.seen || 0) < IDLE_MS) return this.state.storage.setAlarm(claim.seen + IDLE_MS);
+    await this.state.storage.deleteAll();
+  }
 }

@@ -34,13 +34,15 @@ Fonts load from Google Fonts with system fallbacks, so the page still works full
 
 MIT. Go make someone's chat sparkle.
 
-## Chat entries (Slot Tools)
+## Chat entries (your own chatbot)
 
-Viewers can join from MyPrize chat with `!blingo`. Click **💬 Take entries from chat** on the setup screen, then **Show Slot Tools command**, and paste that line as the Response of a Slot Tools custom command named `blingo` (Permission: Everyone). `!blingo count`, `!blingo list` and `!blingo status` also work. It only answers while the tab is open; the relay in `relay/` is a Cloudflare Worker that just passes messages to the tab.
+Viewers join from chat with `!blingo`, through the bot the streamer already runs: BotRix (Kick, Twitch, YouTube, Trovo),
+Slot Tools (MyPrize), StreamElements, Fossabot, Nightbot, KickBot or Streamer.bot. Click **💬 Take entries from chat**,
+then **Show bot commands**, pick your bot, and paste the `blingo` line as a command open to everyone. Optional ready-made
+lines: `claim`, `blame`, `bs`. `!blingo count`, `!blingo list` and `!blingo status` also work.
 
-## Claim timer, winner log, winner tab
-
-- **Claim timer** (setup: off / 30 s / 60 s / 90 s / 2 min): after the win a countdown bar asks each winner to type `!claim`, or the streamer taps a winner's name to mark them claimed (tap again to undo) (a second Slot Tools command with the same URL plus `&q=claim`, or `!blingo claim`). Claimed winners go green; when time runs out they're marked missed and a Restart button appears.
-- **Thief attempts**: anyone else who types `!claim` triggers one of six on-stream animations (lasers, slap, busted, trapdoor, dodge, cage) and gets called out in chat. Repeat tries within 15 s get a reply but no new animation.
-- **Winner log** (🏆 button): every round's winners and claim results are saved in this browser, so a refresh or an accidental New game never loses who won. Copy or clear it from the log.
-- **Winner tab** (🪟 button): opens one `winners.html?w=Name1,Name2` tab that updates itself with each new winner and claim. Add `&bg=transparent` for OBS.
+Your room key (like `XXXXX-XXXXX`) is made in your browser the first time you open Blingo, kept there, and already
+inside every command. Never use a key from a guide or another streamer: the relay refuses a key that belongs to
+another browser, and Blingo then makes you a new one. **Copy OBS link** carries your key into an OBS Browser Source.
+Keys made before this change keep working. It only answers while the page is open; `relay/` is a Cloudflare Worker
+that just passes messages to the page (tests: `node relay/test.mjs`).

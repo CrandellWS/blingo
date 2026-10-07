@@ -94,8 +94,14 @@ button { font: inherit; cursor: pointer; }
 .chatguide summary { cursor: pointer; color: var(--ink); text-align: center; }
 .chatguide ol { margin: 8px 0 0; padding-left: 22px; line-height: 1.6; }
 .chatguide code { color: var(--ink); }
-#chatCmd, #chatBlame, #chatBs { display: none; width: 100%; margin-top: 8px; padding: 8px 10px; border-radius: 10px;
+#chatSetup { display: none; max-width: 640px; margin: 8px auto 0; text-align: left; }
+#chatSetup.open { display: block; }
+#chatSetup select, #chatSetup input { width: 100%; margin-top: 4px; padding: 8px 10px; border-radius: 10px;
   border: 1px solid var(--card-edge); background: var(--card); color: var(--ink); font: 12px/1.4 var(--font-data); }
+#chatSetup .cmdrow { margin-top: 10px; }
+#chatSetup .cmdrow label, #chatSetup > label { display: block; font-size: 13px; margin-top: 10px; }
+#chatSetup .where { font-size: 13px; margin-top: 4px; }
+#chatKeyShow { font: 600 18px var(--font-data); letter-spacing: 2px; color: var(--gold, #ffd700); }
 .knobs { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 18px 0 24px; }
 .knob {
   background: var(--card); border: 1px solid var(--card-edge); border-radius: 12px;
@@ -327,19 +333,27 @@ header {
   <div class="chatrow">
     <span class="dot" id="chatDot"></span><span id="chatState">Chat entries off</span>
     <button id="chatToggle" class="ghost" type="button">💬 Take entries from chat</button>
-    <button id="chatShow" class="ghost" type="button" style="display:none">Show Slot Tools command</button>
-    <input id="chatBlame" readonly title="Second command: paste as the reply of a !blame command in Slot Tools">
-    <input id="chatBs" readonly title="Third command: paste as the reply of a !bs command in Slot Tools (status shortcut)">
-    <input id="chatCmd" readonly title="Paste this as the reply of a !blingo command in Slot Tools (mods only — it holds your secret key)">
+    <button id="chatShow" class="ghost" type="button">Show bot commands</button>
+    <div id="chatSetup">
+      <label for="chatBot">Your chatbot (the one already in your chat)</label>
+      <select id="chatBot"></select>
+      <div class="where" id="chatWhere"></div>
+      <label>Your room key (made just for this browser; nobody else has it, keep it off stream)</label>
+      <div><span id="chatKeyShow"></span></div>
+      <button id="chatCopyKey" class="ghost" type="button">Copy key</button>
+      <button id="chatNewKey" class="ghost" type="button">New key</button>
+      <button id="chatCopyObs" class="ghost" type="button">Copy OBS link</button>
+      <div id="chatCmds"></div>
+    </div>
     <details class="chatguide">
       <summary>📖 How to set up chat entries</summary>
       <ol>
         <li>Click <b>💬 Take entries from chat</b>. The dot turns green when it's live.</li>
-        <li>Click <b>Show Slot Tools command</b> and copy the line (it holds your private key, so don't show it on stream).</li>
-        <li>In Slot Tools, open <b>Add Custom Command</b>: Command <code>blingo</code>, Response = the line you copied, Permission <b>Everyone</b>, then <b>Add</b>.</li>
+        <li>Click <b>Show bot commands</b>, pick the chatbot already in your chat (BotRix, Slot Tools, StreamElements, Fossabot, Nightbot, KickBot or Streamer.bot).</li>
+        <li>Copy the <code>blingo</code> line and add it as a command named <code>blingo</code> in that bot, open to everyone. Your room key is already in it. It was made for this browser the first time you opened Blingo, so never use a key from a guide, a screenshot or another streamer.</li>
         <li>Keep this tab open. Viewers type <code>!blingo</code> to join while this setup screen is showing, and names land in the box above.</li>
         <li>Also works: <code>!blingo count</code>, <code>!blingo list</code>, <code>!blingo status</code> (shows the winner after the game).</li>
-        <li>Optional <code>!blame</code>: add a second Slot Tools command <code>blame</code> with the same line, but change the end from <code>q=$(query)</code> to <code>q=blame</code> (the box below shows it). It answers "you blame" a random entry, any time, and never joins anyone. Same trick for <code>!bs</code> (a shortcut for <code>!blingo status</code>): command <code>bs</code>, ending <code>q=status</code>.</li>
+        <li>Optional: <code>claim</code> (winners claim within the timer), <code>blame</code> ("you blame" a random entry, never joins anyone) and <code>bs</code> (short for <code>!blingo status</code>). Each has its own ready-made line.</li>
         <li>Tab closed = the command stays quiet. Same browser keeps the same key; a new computer or cleared browser data means pasting a new command.</li>
       </ol>
     </details>
@@ -907,8 +921,8 @@ function updateRules() {
 $("kMode").addEventListener("input", updateRules);
 updateRules();
 
-/* ---------- chat entries via Slot Tools $(urlfetch) ----------
-   Slot Tools -> relay Worker (relay/) -> this tab over a WebSocket -> reply text -> chat.
+/* ---------- chat entries via the streamer's own bot (BotRix, Slot Tools, ... see BOTS) ----------
+   bot URL fetch -> relay Worker (relay/) -> this tab over a WebSocket -> reply text -> chat.
    One command:  !blingo  -> $(urlfetch <relay>/c/<key>?user=$(user)&q=$(query))
      !blingo            join (only while the setup screen is open)
      !blingo count      how many are in
@@ -920,13 +934,60 @@ updateRules();
 const RELAY = new URLSearchParams(location.search).get("relay") || CONFIG.relayBase;
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
                 set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
-// ?key=<k> pins a key handed out ahead of time, then drops it from the address bar.
-const urlKey = new URLSearchParams(location.search).get("key");
-if (urlKey && /^[A-Za-z0-9_-]{16,64}$/.test(urlKey)) {
-  store.set("blingo.chatKey", urlKey); store.set("blingo.chatOn", "1");
-  const u = new URL(location.href); u.searchParams.delete("key"); history.replaceState(null, "", u);
+/* Room keys (same rules as the relay and HOS Chat Play): minted in this browser, never typed or shared.
+   New keys look like XXXXX-XXXXX (no 0/O/1/I/L). Keys made before this change (16-64 chars) keep working
+   exactly as before, with no owner token, so commands already pasted into Slot Tools never break.        */
+const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const NEW_KEY_RE = /^[2-9A-HJKMNP-Z]{5}-[2-9A-HJKMNP-Z]{5}$/, LEGACY_KEY_RE = /^[A-Za-z0-9_-]{16,64}$/;
+const keyOk = k => (NEW_KEY_RE.test(k) && !/^(.)\1{4}-\1{5}$/.test(k)) || LEGACY_KEY_RE.test(k);
+function pick(n) {
+  const out = [], lim = 256 - (256 % ALPHABET.length);
+  while (out.length < n) for (const b of crypto.getRandomValues(new Uint8Array(n * 2))) if (b < lim && out.length < n) out.push(ALPHABET[b % ALPHABET.length]);
+  return out.join("");
 }
-let chatKey = urlKey || store.get("blingo.chatKey"), chatWs = null, chatOn = false, chatPing = null;
+const mintKey = () => pick(5) + "-" + pick(5);
+const mintToken = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 32);
+// ?key=&owner= (Copy OBS link, or a key handed out ahead of time) pin this browser to that room, then leave the address bar.
+const qp = new URLSearchParams(location.search);
+let urlKey = qp.get("key");
+if (urlKey && NEW_KEY_RE.test(urlKey.toUpperCase())) urlKey = urlKey.toUpperCase();
+if (urlKey && keyOk(urlKey)) {
+  store.set("blingo.chatKey", urlKey); store.set("blingo.chatOn", "1");
+  const o = qp.get("owner"); if (o && LEGACY_KEY_RE.test(o)) store.set("blingo.chatOwner", o);
+}
+if (qp.has("key") || qp.has("owner")) { const u = new URL(location.href); u.searchParams.delete("key"); u.searchParams.delete("owner"); history.replaceState(null, "", u); }
+let chatKey = store.get("blingo.chatKey");
+if (!chatKey || !keyOk(chatKey)) { chatKey = mintKey(); store.set("blingo.chatKey", chatKey); }   // first open: a fresh key
+let chatOwner = store.get("blingo.chatOwner");
+if (!chatOwner) { chatOwner = mintToken(); store.set("blingo.chatOwner", chatOwner); }
+let chatWs = null, chatOn = false, chatPing = null;
+let chatNeedsPaste = false;   // set when the relay made us switch keys; cleared once a command is copied
+
+/* Chat bots: same table as HOS Chat Play (streamer-games chat/index.html, chat/BOTS.md). */
+const BOTS = {
+  botrix:   { title: "BotRix (Kick, Twitch, YouTube, Trovo)", where: "BotRix dashboard → Commands → Custom commands → add the command, paste the line as its response.",
+              p: "$(platform)", words: "$(v1 join)", user: "$(urlencode $(sender))", wrap: u => `fetch[${u}]` },
+  slottools:{ title: "Slot Tools (MyPrize)", where: "slottools.live/myprize → Custom Commands → Add New Command, Permission Everyone, paste the line as the Response.",
+              p: "", words: "$(query)", user: "$(user)", wrap: u => `$(urlfetch ${u})` },
+  streamelements: { title: "StreamElements", where: "StreamElements → Chatbot → Commands → Custom → add the command, paste the line as the response.",
+              p: "se", words: "$(queryescape $(1))", user: "$(queryescape $(sender))", wrap: u => `$(customapi ${u})` },
+  fossabot: { title: "Fossabot", where: "Fossabot dashboard → Commands → add the command, paste the line as the response.",
+              p: "fossabot", words: "$(querystring)", user: "", wrap: u => `$(customapi ${u})` },
+  nightbot: { title: "Nightbot (Twitch, YouTube)", where: "Nightbot → Commands → Custom → add the command, paste the line as the message.",
+              p: "", words: "$(querystring)", user: "", wrap: u => `$(urlfetch ${u})` },
+  kickbot:  { title: "KickBot", where: "KickBot → Chat Bot → Custom commands → add the command, paste the line.",
+              p: "kick", words: "", user: "{{sender.username}}", wrap: u => `{{request("${u}").value}}` },
+  streamerbot: { title: "Streamer.bot (local)", where: "Streamer.bot: a Command → an Action with Core → Network → Fetch URL (this URL, variable reply), then Send Message %reply%.",
+              p: "sb", words: "%rawInputUrlEncoded%", user: "%userName%", wrap: u => u },
+};
+function botLine(b, fixed) {
+  const B = BOTS[b], q = fixed || B.words;
+  const parts = [B.p && "p=" + B.p, q && "q=" + q, B.user && "user=" + B.user].filter(Boolean);
+  return B.wrap(`${RELAY}/c/${chatKey}?` + parts.join("&"));
+}
+const CMDS = [["blingo", "", "Main command: join, count, list, status"], ["claim", "claim", "Winners claim their prize"],
+              ["blame", "blame", "Blames a random entry"], ["bs", "status", "Short for !blingo status"]];
+let chatBot = BOTS[qp.get("bot")] ? qp.get("bot") : (BOTS[store.get("blingo.chatBot")] ? store.get("blingo.chatBot") : "botrix");
 
 function chatSetState(on, msg) {
   $("chatDot").classList.toggle("on", on);
@@ -934,14 +995,21 @@ function chatSetState(on, msg) {
 }
 function chatConnect() {
   if (!chatOn) return;
-  chatWs = new WebSocket(RELAY.replace(/^http/, "ws") + "/ws/" + chatKey);
-  chatWs.onopen = () => chatSetState(true, "Chat entries live");
+  // New keys carry this browser's owner token so nobody else can take the room; legacy keys connect as before.
+  chatWs = new WebSocket(RELAY.replace(/^http/, "ws") + "/ws/" + chatKey + (NEW_KEY_RE.test(chatKey) ? "?owner=" + chatOwner : ""));
+  chatWs.onopen = () => chatSetState(true, chatNeedsPaste ? "Chat entries live · paste your new commands into your bot" : "Chat entries live");
   chatWs.onmessage = e => {
     if (e.data === "pong") return;
     let m; try { m = JSON.parse(e.data); } catch { return; }
     chatWs.send(JSON.stringify({ id: m.id, text: chatAnswer(m.user, m.q) }));
   };
   chatWs.onclose = e => {
+    if (e.code === 4001) {   // another browser owns this key: make our own and ask for a re-paste
+      chatNeedsPaste = true; chatUseKey(mintKey());
+      chatSetState(false, "That key belonged to someone else, so Blingo made you a new one. Paste the new commands into your bot.");
+      $("chatSetup").classList.add("open");
+      return;
+    }
     chatSetState(false, e.code === 4000 ? "Chat entries moved to another tab" : "Chat entries reconnecting…");
     if (chatOn && e.code !== 4000) setTimeout(chatConnect, 3000);
   };
@@ -986,38 +1054,52 @@ function chatAnswer(user, q) {
   $("names").value = names.concat(name).join("\n");
   return `💎 ${name} you're in! ${n + 1} entered`;
 }
-function bsCommand() { return chatCommand().replace("q=$(query)", "q=status"); }
-function blameCommand() { return chatCommand().replace("q=$(query)", "q=blame"); }
-function chatCommand() {
-  return `$(urlfetch ${RELAY}/c/${chatKey}?user=$(user)&q=$(query))`;
+function chatCommand() { return botLine(chatBot, ""); }
+function renderChatSetup() {
+  $("chatBot").value = chatBot; store.set("blingo.chatBot", chatBot);
+  $("chatWhere").textContent = BOTS[chatBot].where;
+  $("chatKeyShow").textContent = chatKey;
+  $("chatCmds").innerHTML = CMDS.map(([name, , what], i) =>
+    `<div class="cmdrow"><label>Command <code>${name}</code>: ${what}</label><input readonly data-i="${i}">` +
+    `<button class="ghost" type="button" data-copy="${i}">Copy ${name} command</button></div>`).join("");
+  $("chatCmds").querySelectorAll("input").forEach(el => { el.value = botLine(chatBot, CMDS[el.dataset.i][1]); });
 }
+for (const [id, b] of Object.entries(BOTS)) $("chatBot").add(new Option(b.title, id));
+$("chatBot").onchange = () => { chatBot = $("chatBot").value; renderChatSetup(); };
+const chatCopy = async (t, what) => { try { await navigator.clipboard.writeText(t); chatSetState(chatWs && chatWs.readyState === 1, what + " copied"); } catch {} };
+$("chatCmds").onclick = e => { const i = e.target.dataset.copy; if (i != null) { chatNeedsPaste = false; chatCopy(botLine(chatBot, CMDS[i][1]), CMDS[i][0] + " command"); } };
+$("chatCopyKey").onclick = () => chatCopy(chatKey, "Key");
+$("chatCopyObs").onclick = () => {
+  const u = new URL(location.href); u.hash = ""; u.searchParams.set("key", chatKey); u.searchParams.set("owner", chatOwner);
+  chatCopy(u.toString(), "OBS link (secret)");
+};
+function chatUseKey(k) {
+  chatKey = k; store.set("blingo.chatKey", k); renderChatSetup();
+  if (chatOn) { if (chatWs) { chatWs.onclose = null; chatWs.close(1000); } chatConnect(); }
+}
+$("chatNewKey").onclick = () => {
+  if (confirm("Make a new key? Commands already in your bot stop working until you paste the new ones.")) chatUseKey(mintKey());
+};
+renderChatSetup();
 $("chatToggle").onclick = () => {
   chatOn = !chatOn;
   if (chatOn) {
-    if (!chatKey) {
-      chatKey = Array.from(crypto.getRandomValues(new Uint8Array(18)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 24);
-      store.set("blingo.chatKey", chatKey);
-    }
     $("chatToggle").textContent = "Stop chat entries";
-    $("chatShow").style.display = "inline-block";
     chatSetState(false, "Chat entries connecting…");
     chatConnect();
     clearInterval(chatPing); chatPing = setInterval(() => chatWs && chatWs.readyState === 1 && chatWs.send("ping"), 30000);
   } else {
     clearInterval(chatPing); if (chatWs) chatWs.close(1000);
     $("chatToggle").textContent = "💬 Take entries from chat";
-    $("chatShow").style.display = "none"; $("chatCmd").style.display = "none"; $("chatBlame").style.display = "none"; $("chatBs").style.display = "none";
     chatSetState(false, "Chat entries off");
   }
   store.set("blingo.chatOn", chatOn ? "1" : "");
 };
-// Hidden by default: the command holds the secret key, so don't flash it on stream.
+// Hidden by default: the commands hold the secret key, so don't flash them on stream.
 $("chatShow").onclick = () => {
-  const box = $("chatCmd"), showing = box.style.display === "block";
-  box.style.display = showing ? "none" : "block";
-  $("chatBlame").style.display = $("chatBs").style.display = box.style.display;
-  $("chatShow").textContent = showing ? "Show Slot Tools command" : "Hide command";
-  if (!showing) { box.value = chatCommand(); $("chatBlame").value = blameCommand(); $("chatBs").value = bsCommand(); box.select(); }
+  const open = $("chatSetup").classList.toggle("open");
+  $("chatShow").textContent = open ? "Hide bot commands" : "Show bot commands";
+  renderChatSetup();
 };
 if (store.get("blingo.chatOn")) $("chatToggle").click();
 
