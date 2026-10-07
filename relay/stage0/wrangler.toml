@@ -1,0 +1,31 @@
+# STAGE 0 (runbook step 4). Deploy from this folder: cd relay/stage0 && npx wrangler deploy
+# Same name, bindings and migrations as ../wrangler.toml, so the new relay can follow and roll back to this.
+name = "blingo-relay"
+main = "worker.js"   # stage0/worker.js: live code + empty Counter class
+compatibility_date = "2026-09-01"
+# Keep the workers.dev address on: commands already pasted into bots (RelatableShayla's) point at it.
+workers_dev = true
+# Runbook step 3: a custom domain lets ONE free Cloudflare rate-limiting rule protect the relay (zone rules do not
+# see workers.dev traffic). Uncomment after creating nothing else on that hostname:
+# routes = [ { pattern = "relay.homeofficestudios.com", custom_domain = true } ]
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+# Global daily request counter (audit #4). Adding a class is a non-destructive migration.
+[[durable_objects.bindings]]
+name = "COUNTER"
+class_name = "Counter"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Counter"]
+
+[vars]
+DAILY_CAP = "90000"          # free plan is ~100k requests/day; above this bots get an empty reply
+ALLOWED_ORIGINS = "https://homeofficestudios.com,https://crandellws.github.io"
