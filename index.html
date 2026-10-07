@@ -94,7 +94,7 @@ button { font: inherit; cursor: pointer; }
 .chatguide summary { cursor: pointer; color: var(--ink); text-align: center; }
 .chatguide ol { margin: 8px 0 0; padding-left: 22px; line-height: 1.6; }
 .chatguide code { color: var(--ink); }
-#chatCmd, #chatBlame { display: none; width: 100%; margin-top: 8px; padding: 8px 10px; border-radius: 10px;
+#chatCmd, #chatBlame, #chatBs { display: none; width: 100%; margin-top: 8px; padding: 8px 10px; border-radius: 10px;
   border: 1px solid var(--card-edge); background: var(--card); color: var(--ink); font: 12px/1.4 var(--font-data); }
 .knobs { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin: 18px 0 24px; }
 .knob {
@@ -329,6 +329,7 @@ header {
     <button id="chatToggle" class="ghost" type="button">💬 Take entries from chat</button>
     <button id="chatShow" class="ghost" type="button" style="display:none">Show Slot Tools command</button>
     <input id="chatBlame" readonly title="Second command: paste as the reply of a !blame command in Slot Tools">
+    <input id="chatBs" readonly title="Third command: paste as the reply of a !bs command in Slot Tools (status shortcut)">
     <input id="chatCmd" readonly title="Paste this as the reply of a !blingo command in Slot Tools (mods only — it holds your secret key)">
     <details class="chatguide">
       <summary>📖 How to set up chat entries</summary>
@@ -338,7 +339,7 @@ header {
         <li>In Slot Tools, open <b>Add Custom Command</b>: Command <code>blingo</code>, Response = the line you copied, Permission <b>Everyone</b>, then <b>Add</b>.</li>
         <li>Keep this tab open. Viewers type <code>!blingo</code> to join while this setup screen is showing, and names land in the box above.</li>
         <li>Also works: <code>!blingo count</code>, <code>!blingo list</code>, <code>!blingo status</code> (shows the winner after the game).</li>
-        <li>Optional <code>!blame</code>: add a second Slot Tools command <code>blame</code> with the same line, but change the end from <code>q=$(query)</code> to <code>q=blame</code> (the box below shows it). It answers "you blame" a random entry, any time, and never joins anyone.</li>
+        <li>Optional <code>!blame</code>: add a second Slot Tools command <code>blame</code> with the same line, but change the end from <code>q=$(query)</code> to <code>q=blame</code> (the box below shows it). It answers "you blame" a random entry, any time, and never joins anyone. Same trick for <code>!bs</code> (a shortcut for <code>!blingo status</code>): command <code>bs</code>, ending <code>q=status</code>.</li>
         <li>Tab closed = the command stays quiet. Same browser keeps the same key; a new computer or cleared browser data means pasting a new command.</li>
       </ol>
     </details>
@@ -914,6 +915,7 @@ updateRules();
      !blingo list       who is in (first ~400 chars)
      !blingo status     open / running / winners
    Second command:  !blame -> same URL with q=blame  (random entry: "<you> blames <entry>")
+   Third command:   !bs    -> same URL with q=status  (shortcut for !blingo status)
    Tab closed => the relay answers empty and nothing posts.                       */
 const RELAY = new URLSearchParams(location.search).get("relay") || CONFIG.relayBase;
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -975,7 +977,7 @@ function chatAnswer(user, q) {
     if (!over) return `💎 Blingo is running, last call ${drawn[0] ? callLabel(drawn[0]) : "coming up"}`;
     return winners.length ? `💎 Blingo winner${winners.length > 1 ? "s" : ""}: ${winners.join(", ")}` : "💎 Blingo is over";
   }
-  if (cmd !== "join" && cmd !== "enter" && cmd !== "in") return "💎 !blingo to join · !blingo count · !blingo list · !blingo status · !blame · !claim";
+  if (cmd !== "join" && cmd !== "enter" && cmd !== "in") return "💎 !blingo to join · !blingo count · !blingo list · !blingo status · !blame · !bs · !claim";
   // $(user) sometimes arrives as a raw MyPrize id instead of a name: don't add it, don't echo it.
   const name = (user || "").trim();
   if (!name || /^[0-9a-f]{8}-[0-9a-f]{4}-|^\d{6,}$/i.test(name)) return "💎 Couldn't read your name, try again in a sec";
@@ -984,6 +986,7 @@ function chatAnswer(user, q) {
   $("names").value = names.concat(name).join("\n");
   return `💎 ${name} you're in! ${n + 1} entered`;
 }
+function bsCommand() { return chatCommand().replace("q=$(query)", "q=status"); }
 function blameCommand() { return chatCommand().replace("q=$(query)", "q=blame"); }
 function chatCommand() {
   return `$(urlfetch ${RELAY}/c/${chatKey}?user=$(user)&q=$(query))`;
@@ -1003,7 +1006,7 @@ $("chatToggle").onclick = () => {
   } else {
     clearInterval(chatPing); if (chatWs) chatWs.close(1000);
     $("chatToggle").textContent = "💬 Take entries from chat";
-    $("chatShow").style.display = "none"; $("chatCmd").style.display = "none"; $("chatBlame").style.display = "none";
+    $("chatShow").style.display = "none"; $("chatCmd").style.display = "none"; $("chatBlame").style.display = "none"; $("chatBs").style.display = "none";
     chatSetState(false, "Chat entries off");
   }
   store.set("blingo.chatOn", chatOn ? "1" : "");
@@ -1012,9 +1015,9 @@ $("chatToggle").onclick = () => {
 $("chatShow").onclick = () => {
   const box = $("chatCmd"), showing = box.style.display === "block";
   box.style.display = showing ? "none" : "block";
-  $("chatBlame").style.display = box.style.display;
+  $("chatBlame").style.display = $("chatBs").style.display = box.style.display;
   $("chatShow").textContent = showing ? "Show Slot Tools command" : "Hide command";
-  if (!showing) { box.value = chatCommand(); $("chatBlame").value = blameCommand(); box.select(); }
+  if (!showing) { box.value = chatCommand(); $("chatBlame").value = blameCommand(); $("chatBs").value = bsCommand(); box.select(); }
 };
 if (store.get("blingo.chatOn")) $("chatToggle").click();
 
