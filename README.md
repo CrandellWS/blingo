@@ -45,4 +45,7 @@ Your room key (like `XXXXX-XXXXX`) is made in your browser the first time you op
 inside every command. Never use a key from a guide or another streamer: the relay refuses a key that belongs to
 another browser, and Blingo then makes you a new one. **Copy OBS link** carries your key into an OBS Browser Source.
 Keys made before this change keep working. It only answers while the page is open; `relay/` is a Cloudflare Worker
-that just passes messages to the page (tests: `node relay/test.mjs`).
+that just passes messages to the page (tests: `cd relay && node test.mjs`, Node 18+).
+
+**Deploy order:** deploy the relay Worker (`relay/`) first, then this page. The current live relay only accepts the old
+16-64 character keys, so a page minting `XXXXX-XXXXX` keys before the new relay is live would get "key isn't valid".

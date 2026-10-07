@@ -35,8 +35,8 @@ export async function startDevServer({ port = 8787, root = path.join(here, "..")
       const state = {
         auto: null, sockets,
         setWebSocketAutoResponse(pair) { this.auto = pair; },
-        getWebSockets: () => sockets,
-        acceptWebSocket: s => { s.ref = ref; sockets.push(s); },
+        getWebSockets: tag => tag ? sockets.filter(s => s.tags?.includes(tag)) : sockets,
+        acceptWebSocket: (s, tags = []) => { s.ref = ref; s.tags = tags; sockets.push(s); },
         storage: { get: async k => disk.get(k), put: async (k, v) => { disk.set(k, v); }, deleteAll: async () => disk.clear(),
                    setAlarm: async () => {} },
       };

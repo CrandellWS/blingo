@@ -1,6 +1,11 @@
 name = "blingo-relay"
 main = "worker.js"
 compatibility_date = "2026-09-01"
+# Keep the workers.dev address on: commands already pasted into bots (RelatableShayla's) point at it.
+workers_dev = true
+# Runbook step 3: a custom domain lets ONE free Cloudflare rate-limiting rule protect the relay (zone rules do not
+# see workers.dev traffic). Uncomment after creating nothing else on that hostname:
+# routes = [ { pattern = "relay.homeofficestudios.com", custom_domain = true } ]
 
 [[durable_objects.bindings]]
 name = "ROOM"

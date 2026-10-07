@@ -2,8 +2,8 @@
    Drop-in superset of blingo-relay (same routes, same /lb), plus multi-bot input and abuse limits.
 
    GET /c/XXXXX-XXXXX?user=..&p=..&q=..   the bot hits this; the tab answers in plain text (<= 400 chars).
-       BotRix     fetch[<relay>/c/XXXXX-XXXXX?user=$(urlencode $(sender))&p=$(platform)&q=$(urlencode $(v1 join))]
-       Slot Tools $(urlfetch <relay>/c/XXXXX-XXXXX?user=$(user)&q=$(query))            (MyPrize; unchanged)
+       BotRix     fetch[https://<relay>/c/XXXXX-XXXXX?user=$(urlencode $(sender))&p=$(platform)&q=$(urlencode $(v1 join))]
+       Slot Tools $(urlfetch https://<relay>/c/XXXXX-XXXXX?user=$(user)&q=$(query))            (MyPrize; unchanged)
        The viewer's words always go last and encoded; a request naming a field twice is refused (empty body).
        others     see streamer-games chat/BOTS.md (or the bot picker on the page)
    GET /ws/<key>                     the game tab connects here (WebSocket).
@@ -14,7 +14,10 @@
    Limits: per-room join/other buckets + per-viewer gap (Room), per-IP buckets (isolate memory), a global daily
    cap (Counter DO, env DAILY_CAP), at most 30 socket connects per room per minute (close 4003), and an
    optional Origin allow-list for sockets (env ALLOWED_ORIGINS).
-   No tab connected => a short "not running" line (override with &off=...); no answer inside 3.5s => empty body.
+   No tab connected => one fixed "not live" line (never text from the request); no answer inside 3.5s => empty body.
+   Only the known fields are read (user/p/h/q and their aliases); every other query parameter is ignored.
+   Roles: the OBS link connects with &role=obs. While an OBS page holds the room, a browser tab is refused (4002)
+   instead of kicking OBS; a newer OBS page replaces an older one (ghost after an OBS refresh).
    Over the rate limit => empty body. The relay holds no game state; all logic lives in the page.        */
 
 import { readRequest, safeReply, Limiter, IpLimiter, normalizeKey, decideClaim, IDLE_MS, CLAIM_TTL_MS } from "./bots.js";
@@ -44,7 +47,7 @@ async function leaderboard(url, ctx) {
       res = new Response(await live.text(), { headers: { "cache-control": `max-age=${ttl}`, "content-type": "application/json" } });
       ctx.waitUntil(cache.put(ck, res.clone()));
     }
-    return res.json();
+    try { return await res.json(); } catch { return null; }      // a non-JSON 200 from MyPrize
   };
   const info = await get(`rooms/slug/${encodeURIComponent(room)}`, 3600);
   if (!info || !info.id) return text("🏆 Couldn't find that MyPrize room");
@@ -135,6 +138,7 @@ export class Counter {
   async fetch(req) {
     const u = new URL(req.url), day = u.searchParams.get("day") || "", n = Math.max(0, Math.min(10000, +u.searchParams.get("n") || 0));
     const cur = (await this.state.storage.get("c")) || { day, count: 0 };
+    if (cur.day && day < cur.day) return new Response("0");      // a late batch from yesterday: never reset today's count
     const next = cur.day === day ? { day, count: cur.count + n } : { day, count: n };
     await this.state.storage.put("c", next);
     return new Response(String(next.count));
@@ -156,20 +160,31 @@ export class Room {
       const now = Date.now();
       const { 0: client, 1: server } = new WebSocketPair();
       const refuse = (code, why) => { server.accept(); server.close(code, why); return new Response(null, { status: 101, webSocket: client }); };
-      this.connects = this.connects.filter(t => now - t < 60000);
-      if (this.connects.length >= 30) return refuse(4003, "too many connects, retry in a minute");   // no storage writes
-      this.connects.push(now);
-      const owner = new URL(req.url).searchParams.get("owner") || "";
+      const params = new URL(req.url).searchParams;
+      const owner = params.get("owner") || "", role = params.get("role") === "obs" ? "obs" : "page";
       const key = req.headers.get("x-room-key") || "";
       const stored = await this.state.storage.get("claim");
       const live = this.state.getWebSockets().length > 0;
       const verdict = decideClaim({ key, owner, stored, live, now });
       // Close code the page understands: a new-format key owned by another page. Never sent for legacy keys.
+      // Refused attempts do NOT use up connect slots, so a stranger can't lock the owner out (re-audit P2-c).
       if (verdict === "refuse") return refuse(4001, "key belongs to another page");
+      // The owner's own reconnects are exempt from the cap; everyone else gets 30 accepted connects a minute.
+      const isOwner = verdict === "claim" && stored?.owner === owner;
+      if (!isOwner) {
+        this.connects = this.connects.filter(t => now - t < 60000);
+        if (this.connects.length >= 30) return refuse(4003, "too many connects, retry in a minute");   // no storage writes
+        this.connects.push(now);
+      }
+      // A browser tab never kicks the OBS page; it gets 4002 and becomes a plain control panel (re-audit kick loop).
+      if (role !== "obs" && this.state.getWebSockets("obs").length) return refuse(4002, "OBS has this room");
       for (const old of this.state.getWebSockets()) old.close(4000, "replaced by a newer tab");
-      if (verdict === "claim" && (stored?.owner !== owner || now - (stored.seen || 0) > 3600000)) await this.state.storage.put("claim", { owner, seen: now });
-      if (verdict === "claim") await this.state.storage.setAlarm(now + IDLE_MS);
-      this.state.acceptWebSocket(server);
+      // One claim write + one alarm per connect at most, and none for a reconnect within the hour (re-audit P2-d).
+      if (verdict === "claim" && (stored?.owner !== owner || now - (stored.seen || 0) > 3600000)) {
+        await this.state.storage.put("claim", { owner, seen: now });
+        await this.state.storage.setAlarm(now + IDLE_MS);
+      }
+      this.state.acceptWebSocket(server, [role]);
       return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -177,8 +192,8 @@ export class Room {
     const { user, q, platform, h, reject } = readRequest(url, req.headers);
     if (reject || !this.limit.allow(user, q)) return text("");
     const tab = this.state.getWebSockets()[0];
-    // No page open: say so instead of posting nothing. A command can override it with &off=<text>.
-    if (!tab) return text(safeReply(url.searchParams.get("off") || "🎮 This game isn't live right now."));
+    // No page open: one fixed line. Never anything from the request (re-audit P2-e: viewers could append &off=).
+    if (!tab) return text("🎮 This game isn't live right now.");
 
     const id = crypto.randomUUID();
     const reply = new Promise(resolve => {
@@ -203,10 +218,11 @@ export class Room {
 
   async webSocketClose(ws, code) {
     try { ws.close(code, "bye"); } catch {}
-    const claim = await this.state.storage.get("claim");
+    const claim = await this.state.storage.get("claim"), now = Date.now();
     if (!claim) return;                                          // legacy keys store nothing
-    await this.state.storage.put("claim", { ...claim, seen: Date.now() });
-    await this.state.storage.setAlarm(Date.now() + IDLE_MS);
+    if (now - (claim.seen || 0) < 3600000) return;               // connect-then-leave spam: the connect already wrote
+    await this.state.storage.put("claim", { ...claim, seen: now });
+    await this.state.storage.setAlarm(now + IDLE_MS);
   }
 
   /* 24h after the last page left: wipe the room, keep only the owner binding (so nobody else can take the key).

@@ -949,6 +949,7 @@ const mintKey = () => pick(5) + "-" + pick(5);
 const mintToken = () => Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(36).padStart(2, "0")).join("").slice(0, 32);
 // ?key=&owner= (Copy OBS link, or a key handed out ahead of time) pin this browser to that room, then leave the address bar.
 const qp = new URLSearchParams(location.search);
+const CHAT_OBS = qp.get("role") === "obs";   // set by "Copy OBS link"; stays in the OBS URL (not secret)
 let urlKey = qp.get("key");
 if (urlKey && NEW_KEY_RE.test(urlKey.toUpperCase())) urlKey = urlKey.toUpperCase();
 if (urlKey && keyOk(urlKey)) {
@@ -997,7 +998,10 @@ function chatSetState(on, msg) {
 function chatConnect() {
   if (!chatOn) return;
   // New keys carry this browser's owner token so nobody else can take the room; legacy keys connect as before.
-  chatWs = new WebSocket(RELAY.replace(/^http/, "ws") + "/ws/" + chatKey + (NEW_KEY_RE.test(chatKey) ? "?owner=" + chatOwner : ""));
+  const params = new URLSearchParams();
+  if (NEW_KEY_RE.test(chatKey)) params.set("owner", chatOwner);
+  if (CHAT_OBS) params.set("role", "obs");        // the relay never lets a browser tab kick the OBS page
+  chatWs = new WebSocket(RELAY.replace(/^http/, "ws") + "/ws/" + chatKey + (params.toString() ? "?" + params : ""));
   chatWs.onopen = () => chatSetState(true, chatNeedsPaste ? "Chat entries live · paste your new commands into your bot" : "Chat entries live");
   chatWs.onmessage = e => {
     if (e.data === "pong") return;
@@ -1011,7 +1015,13 @@ function chatConnect() {
       $("chatSetup").classList.add("open");
       return;
     }
-    chatSetState(false, e.code === 4000 ? "Chat entries moved to another tab" : "Chat entries reconnecting…");
+    if (e.code === 4002 || e.code === 4000) {      // OBS holds the room, or a newer page took it: stay off
+      chatOn = false; clearInterval(chatPing); if (!CHAT_OBS) store.set("blingo.chatOn", "");
+      $("chatToggle").textContent = "💬 Take entries from chat";
+      chatSetState(false, e.code === 4002 ? "OBS is taking chat entries (this tab is the control panel)" : "Chat entries moved to another tab");
+      return;
+    }
+    chatSetState(false, "Chat entries reconnecting…");
     if (chatOn && e.code !== 4000) setTimeout(chatConnect, e.code === 4003 ? 60000 : 3000);   // 4003: too many connects
   };
 }
@@ -1071,7 +1081,7 @@ const chatCopy = async (t, what) => { try { await navigator.clipboard.writeText(
 $("chatCmds").onclick = e => { const i = e.target.dataset.copy; if (i != null) { chatNeedsPaste = false; chatCopy(botLine(chatBot, CMDS[i][1]), CMDS[i][0] + " command"); } };
 $("chatCopyKey").onclick = () => chatCopy(chatKey, "Key");
 $("chatCopyObs").onclick = () => {
-  const u = new URL(location.href); u.hash = ""; u.searchParams.set("key", chatKey); u.searchParams.set("owner", chatOwner);
+  const u = new URL(location.href); u.hash = ""; u.searchParams.set("key", chatKey); u.searchParams.set("owner", chatOwner); u.searchParams.set("role", "obs");
   chatCopy(u.toString(), "OBS link (secret)");
 };
 function chatUseKey(k) {
@@ -1102,7 +1112,7 @@ $("chatShow").onclick = () => {
   $("chatShow").textContent = open ? "Hide bot commands" : "Show bot commands";
   renderChatSetup();
 };
-if (store.get("blingo.chatOn")) $("chatToggle").click();
+if (CHAT_OBS || store.get("blingo.chatOn")) $("chatToggle").click();   // the OBS page always takes entries
 
 /* ---------- deep links: #n=alice,bob&w=5&s=4&go=1 ---------- */
 (function fromList() {

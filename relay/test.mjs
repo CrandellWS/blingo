@@ -144,13 +144,15 @@ globalThis.WebSocketPair = function () { const c = fakeWs(), s = fakeWs(); pairs
 const { default: worker, Room, Counter } = await import("./worker.js");
 
 function makeRoom() {
-  const sockets = [], disk = new Map(), st = { alarmAt: null };
-  const storage = { get: async k => disk.get(k), put: async (k, v) => { disk.set(k, v); }, deleteAll: async () => disk.clear(),
-                    setAlarm: async t => { st.alarmAt = t; } };
-  const room = new Room({ setWebSocketAutoResponse() {}, getWebSockets: () => sockets, storage, acceptWebSocket: ws => sockets.push(ws) });
+  const sockets = [], disk = new Map(), st = { alarmAt: null, puts: 0, alarms: 0 };
+  const storage = { get: async k => disk.get(k), put: async (k, v) => { st.puts++; disk.set(k, v); }, deleteAll: async () => disk.clear(),
+                    setAlarm: async t => { st.alarms++; st.alarmAt = t; } };
+  const room = new Room({ setWebSocketAutoResponse() {}, storage,
+    getWebSockets: tag => tag ? sockets.filter(w => w.tags.includes(tag)) : sockets,
+    acceptWebSocket: (ws, tags = []) => { ws.tags = tags; sockets.push(ws); } });
   return { room, sockets, disk, st };
 }
-const wsReq = (key, owner) => new Request(`https://relay.test/ws/${key}${owner ? "?owner=" + owner : ""}`,
+const wsReq = (key, owner, role) => new Request(`https://relay.test/ws/${key}?${owner ? "owner=" + owner : ""}${role ? "&role=" + role : ""}`,
   { headers: { Upgrade: "websocket", "x-room-key": key } });
 const A = "ownerAAAAAAAAAAAAAAA", B = "ownerBBBBBBBBBBBBBBB", NEWKEY = "K7M3P-Q9RTW", LEGACY = "legacy_shaped_key_123456";
 
@@ -195,9 +197,38 @@ await okA("audit #4: more than 30 socket connects a minute to one room are refus
   assert.equal(pairs.at(-1).closed, 4003); assert.equal(disk.size, 0, "no claim written while over the connect cap");
 });
 
+await okA("re-audit P2-c: a stranger's refused attempts can't lock the owner out; the owner's reconnects are never capped", async () => {
+  const { room, sockets } = makeRoom();
+  await room.fetch(wsReq(NEWKEY, A));
+  for (let i = 0; i < 50; i++) { await room.fetch(wsReq(NEWKEY, B)); assert.equal(pairs.at(-1).closed, 4001); }
+  for (let i = 0; i < 40; i++) { await room.fetch(wsReq(NEWKEY, A)); assert.equal(pairs.at(-1).closed, null, "owner reconnect " + i); }
+  assert.equal(sockets.at(-1).closed, null);
+});
+await okA("re-audit kick loop: an OBS page is never kicked by a browser tab (4002); a newer OBS page replaces an older one", async () => {
+  const { room, sockets } = makeRoom();
+  await room.fetch(wsReq(NEWKEY, A, "obs"));
+  const obs = sockets[0];
+  await room.fetch(wsReq(NEWKEY, A));                       // the streamer reopens Chrome with chat on
+  assert.equal(pairs.at(-1).closed, 4002); assert.equal(obs.closed, null); assert.equal(sockets.length, 1);
+  await room.fetch(wsReq(NEWKEY, A, "obs"));                // OBS refresh: the ghost is replaced
+  assert.equal(obs.closed, 4000); assert.equal(sockets.length, 2); assert.deepEqual(sockets[1].tags, ["obs"]);
+  const { room: r2, sockets: s2 } = makeRoom();             // with no OBS page, tabs replace each other as before
+  await r2.fetch(wsReq(LEGACY, "")); await r2.fetch(wsReq(LEGACY, ""));
+  assert.equal(s2[0].closed, 4000);
+});
+await okA("re-audit P2-d: connect-then-leave spam costs one storage write and one alarm, not two of each", async () => {
+  const { room, sockets, st } = makeRoom();
+  await room.fetch(wsReq(NEWKEY, A)); await room.webSocketClose(sockets.pop(), 1000);
+  assert.equal(st.puts, 1); assert.equal(st.alarms, 1);
+});
+
 const { room, sockets } = makeRoom();
 const get = (qs, h) => room.fetch(new Request("https://relay.test/c/key?" + qs, { headers: h })).then(r => r.text());
 await okA("no tab: not-live line", async () => assert.equal(await get("user=a&q=join"), "🎮 This game isn't live right now."));
+await okA("re-audit P2-e: a viewer-appended &off=<text> is never echoed while the page is closed", async () => {
+  assert.equal(await get("user=b&q=join&off=FREE%20CODES%20at%20scam.example"), "🎮 This game isn't live right now.");
+  assert.equal(await get("user=c&q=x&off=hi&p=kick&p=twitch"), "");   // a repeated p is refused outright
+});
 let seen;
 sockets.push({ send(raw) { seen = JSON.parse(raw);
   queueMicrotask(() => room.webSocketMessage(null, JSON.stringify({ id: seen.id, text: `🎮 ${seen.user} you're in! (${seen.platform})` })));
@@ -250,6 +281,18 @@ await okA("audit #4: one IP hammering /c with random keys is cut off; the daily 
   for (let i = 0; i < 80; i++) if ((await (await door(`/c/${LEGACY}?user=v${i}&q=join`, { "cf-connecting-ip": "8.8.8." + (i % 200) })).text()) === "") silent++;
   assert.ok(silent >= 30, `silent=${silent}`);
   delete env.COUNTER; delete env.DAILY_CAP;
+});
+await okA("re-audit P3: a late batch from yesterday never resets today's daily count", async () => {
+  const disk = new Map(), c = new Counter({ storage: { get: async k => disk.get(k), put: async (k, v) => disk.set(k, v) } });
+  assert.equal(await (await c.fetch(new Request("https://counter/add?day=2026-10-08&n=500"))).text(), "500");
+  assert.equal(await (await c.fetch(new Request("https://counter/add?day=2026-10-07&n=50"))).text(), "0");
+  assert.equal(await (await c.fetch(new Request("https://counter/add?day=2026-10-08&n=1"))).text(), "501");
+});
+await okA("re-audit P3: /lb survives a non-JSON 200 from MyPrize", async () => {
+  const realFetch = globalThis.fetch; globalThis.caches = { default: { match: async () => null, put: async () => {} } };
+  globalThis.fetch = async () => new RealResponse("<html>maintenance</html>", { status: 200 });
+  try { const r = await door("/lb?room=someroom2"); assert.equal(r.status, 200); assert.match(await r.text(), /Couldn't find|unavailable/); }
+  finally { globalThis.fetch = realFetch; }
 });
 await okA("audit #15: /lb survives a network error from MyPrize", async () => {
   const realFetch = globalThis.fetch; globalThis.caches = { default: { match: async () => null, put: async () => {} } };
