@@ -9,3 +9,16 @@ class_name = "Room"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+# Global daily request counter (audit #4). Adding a class is a non-destructive migration.
+[[durable_objects.bindings]]
+name = "COUNTER"
+class_name = "Counter"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Counter"]
+
+[vars]
+DAILY_CAP = "90000"          # free plan is ~100k requests/day; above this bots get an empty reply
+ALLOWED_ORIGINS = "https://homeofficestudios.com,https://crandellws.github.io"

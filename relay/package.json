@@ -1,0 +1,7 @@
+{
+  "name": "chat-play-relay",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker relay between chat bots and the open game page. Tests run on Node 18+.",
+  "scripts": { "test": "node test.mjs" }
+}

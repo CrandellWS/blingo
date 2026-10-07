@@ -966,7 +966,7 @@ let chatNeedsPaste = false;   // set when the relay made us switch keys; cleared
 /* Chat bots: same table as HOS Chat Play (streamer-games chat/index.html, chat/BOTS.md). */
 const BOTS = {
   botrix:   { title: "BotRix (Kick, Twitch, YouTube, Trovo)", where: "BotRix dashboard → Commands → Custom commands → add the command, paste the line as its response.",
-              p: "$(platform)", words: "$(v1 join)", user: "$(urlencode $(sender))", wrap: u => `fetch[${u}]` },
+              p: "$(platform)", words: "$(urlencode $(v1 join))", user: "$(urlencode $(sender))", wrap: u => `fetch[${u}]` },
   slottools:{ title: "Slot Tools (MyPrize)", where: "slottools.live/myprize → Custom Commands → Add New Command, Permission Everyone, paste the line as the Response.",
               p: "", words: "$(query)", user: "$(user)", wrap: u => `$(urlfetch ${u})` },
   streamelements: { title: "StreamElements", where: "StreamElements → Chatbot → Commands → Custom → add the command, paste the line as the response.",
@@ -982,7 +982,8 @@ const BOTS = {
 };
 function botLine(b, fixed) {
   const B = BOTS[b], q = fixed || B.words;
-  const parts = [B.p && "p=" + B.p, q && "q=" + q, B.user && "user=" + B.user].filter(Boolean);
+  // user first, viewer's words LAST and encoded: typed "&user=X" can't override the name (relay refuses repeats).
+  const parts = [B.user && "user=" + B.user, B.p && "p=" + B.p, q && "q=" + q].filter(Boolean);
   return B.wrap(`${RELAY}/c/${chatKey}?` + parts.join("&"));
 }
 const CMDS = [["blingo", "", "Main command: join, count, list, status"], ["claim", "claim", "Winners claim their prize"],
@@ -1004,14 +1005,14 @@ function chatConnect() {
     chatWs.send(JSON.stringify({ id: m.id, text: chatAnswer(m.user, m.q) }));
   };
   chatWs.onclose = e => {
-    if (e.code === 4001) {   // another browser owns this key: make our own and ask for a re-paste
+    if (e.code === 4001 && NEW_KEY_RE.test(chatKey)) {   // another browser owns this key: make our own and ask for a re-paste
       chatNeedsPaste = true; chatUseKey(mintKey());
       chatSetState(false, "That key belonged to someone else, so Blingo made you a new one. Paste the new commands into your bot.");
       $("chatSetup").classList.add("open");
       return;
     }
     chatSetState(false, e.code === 4000 ? "Chat entries moved to another tab" : "Chat entries reconnecting…");
-    if (chatOn && e.code !== 4000) setTimeout(chatConnect, 3000);
+    if (chatOn && e.code !== 4000) setTimeout(chatConnect, e.code === 4003 ? 60000 : 3000);   // 4003: too many connects
   };
 }
 function chatAnswer(user, q) {
