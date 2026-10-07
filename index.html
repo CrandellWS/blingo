@@ -959,13 +959,18 @@ function chatAnswer(user, q) {
   if (cmd === "blame") {
     const who = (user || "").trim();
     if (!who || /^[0-9a-f]{8}-[0-9a-f]{4}-|^\d{6,}$/i.test(who)) return "💎 Couldn't read your name, try again in a sec";
-    if (!n) return `${who} has nobody to blame yet`;
+    if (!n) return `💎 ${who} has nobody to blame yet`;
     const pick = names[Math.floor(Math.random() * n)];
-    return pick.toLowerCase() === who.toLowerCase() && n === 1 ? `${who} blames themselves` : `${who} blames ${pick}`;
+    return pick.toLowerCase() === who.toLowerCase() && n === 1 ? `💎 ${who} blames themselves` : `💎 ${who} blames ${pick}`;
   }
   if (cmd === "status") {
-    if (claim && [...claim.who.values()].includes("waiting"))
-      return `💎 Waiting on ${[...claim.who].filter(([, s]) => s === "waiting").map(([w]) => w).join(", ")} to type !claim`;
+    if (!open && over && winners.length) {
+      const w = winners, lab = mode === "first" ? `First: ${w[0]}` : mode === "last" ? `Last: ${w[0]}`
+        : mode === "both" ? (w.length === 1 ? `First & Last: ${w[0]}` : `First: ${w[0]} · Last: ${w[1]}`)
+        : `Line: ${w.join(", ")}`;
+      const wait = claim ? [...claim.who].filter(([, s]) => s === "waiting").map(([x]) => x) : [];
+      return `💎 ${lab}${wait.length ? ` · waiting on ${wait.join(", ")} to type !claim` : ""}`.slice(0, 400);
+    }
     if (open) return `💎 Blingo entries are OPEN, ${n} in. Type !blingo to join`;
     if (!over) return `💎 Blingo is running, last call ${drawn[0] ? callLabel(drawn[0]) : "coming up"}`;
     return winners.length ? `💎 Blingo winner${winners.length > 1 ? "s" : ""}: ${winners.join(", ")}` : "💎 Blingo is over";
