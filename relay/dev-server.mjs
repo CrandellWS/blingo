@@ -12,7 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
                ".png": "image/png", ".webp": "image/webp", ".svg": "image/svg+xml", ".json": "application/json" };
 
-export async function startDevServer({ port = 8787, root = path.join(here, ".."), mounts = {} } = {}) {
+export async function startDevServer({ port = 8787, root = path.join(here, ".."), mounts = {}, vars = {} } = {}) {
   const { WebSocketServer } = createRequire(import.meta.url)(process.env.WS_MODULE || "ws");
 
   // Workers runtime shims: 101 responses, WebSocketPair, auto ping/pong pairs.
@@ -29,7 +29,7 @@ export async function startDevServer({ port = 8787, root = path.join(here, "..")
 
   const { default: worker, Room } = await import("./worker.js");
   const rooms = new Map();
-  const env = { ROOM: { idFromName: n => n, get: name => {
+  const env = { ...vars, ROOM: { idFromName: n => n, get: name => {
     if (!rooms.has(name)) {
       const sockets = [], disk = new Map(), ref = {};
       const state = {
@@ -67,7 +67,7 @@ export async function startDevServer({ port = 8787, root = path.join(here, "..")
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", async (req, socket, head) => {
     const r = await worker.fetch(toRequest(req), env, { waitUntil() {} });
-    if (r.status !== 101) { socket.destroy(); return; }
+    if (r.status !== 101) { socket.end(`HTTP/1.1 ${r.status} Refused\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`); return; }   // like Cloudflare: a real status
     const srv = r.webSocket.server;
     wss.handleUpgrade(req, socket, head, ws => {
       srv.ws = ws;
