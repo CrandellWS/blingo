@@ -1016,7 +1016,7 @@ function chatConnect() {
       return;
     }
     if (e.code === 4002 || e.code === 4000) {      // OBS holds the room, or a newer page took it: stay off
-      chatOn = false; clearInterval(chatPing); if (!CHAT_OBS) store.set("blingo.chatOn", "");
+      chatOn = false; clearInterval(chatPing);   // do NOT persist "off": a reload should take entries again (2026-10-07 Shayla fix)
       $("chatToggle").textContent = "💬 Take entries from chat";
       chatSetState(false, e.code === 4002 ? "OBS is taking chat entries (this tab is the control panel)" : "Chat entries moved to another tab");
       return;
@@ -1112,7 +1112,7 @@ $("chatShow").onclick = () => {
   $("chatShow").textContent = open ? "Hide bot commands" : "Show bot commands";
   renderChatSetup();
 };
-if (CHAT_OBS || store.get("blingo.chatOn")) $("chatToggle").click();   // the OBS page always takes entries
+if (CHAT_OBS || store.get("blingo.chatOn") !== "") $("chatToggle").click();   // on by default (first open, reloads); only an explicit "Stop chat entries" keeps it off
 
 /* ---------- deep links: #n=alice,bob&w=5&s=4&go=1 ---------- */
 (function fromList() {
